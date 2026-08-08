@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -112,6 +113,37 @@ data class InternshipItem(
 )
 
 
+data class PlacementSkill(
+    val id: Long = System.currentTimeMillis() + kotlin.random.Random.nextLong(0, 100000),
+    val name: String,
+    val category: String,
+    val rating: Int
+)
+
+data class PlacementAchievement(
+    val id: Long = System.currentTimeMillis() + kotlin.random.Random.nextLong(0, 100000),
+    val title: String,
+    val type: String,
+    val position: String,
+    val year: String
+)
+
+data class PlacementCertification(
+    val id: Long = System.currentTimeMillis() + kotlin.random.Random.nextLong(0, 100000),
+    val name: String,
+    val issuer: String,
+    val date: String,
+    val credentialUrl: String
+)
+
+data class PlacementLearning(
+    val id: Long = System.currentTimeMillis() + kotlin.random.Random.nextLong(0, 100000),
+    val name: String,
+    val category: String,
+    val level: Int
+)
+
+
 // =========================================================
 // HOME SCREEN
 // =========================================================
@@ -150,6 +182,15 @@ fun HomeScreen() {
     val internships = remember {
         mutableStateListOf<InternshipItem>()
     }
+
+    var showPlacementScreen by remember {
+        mutableStateOf(false)
+    }
+
+    val placementSkills = remember { mutableStateListOf<PlacementSkill>() }
+    val placementAchievements = remember { mutableStateListOf<PlacementAchievement>() }
+    val placementCertifications = remember { mutableStateListOf<PlacementCertification>() }
+    val placementLearning = remember { mutableStateListOf<PlacementLearning>() }
 
     val academicEvents = remember {
         mutableStateListOf<AcademicEvent>()
@@ -240,6 +281,44 @@ fun HomeScreen() {
             }
         )
 
+    } else if (showPlacementScreen) {
+
+        PlacementScreen(
+            currentCgpa = 8.7f,
+            dsaProblems = dsaProblems,
+            projects = projects,
+            internships = internships,
+            skills = placementSkills,
+            achievements = placementAchievements,
+            certifications = placementCertifications,
+            learning = placementLearning,
+            onBack = { showPlacementScreen = false },
+            onAddSkill = { placementSkills.add(it) },
+            onUpdateSkill = { updated ->
+                val index = placementSkills.indexOfFirst { it.id == updated.id }
+                if (index >= 0) placementSkills[index] = updated
+            },
+            onDeleteSkill = { id -> placementSkills.removeAll { it.id == id } },
+            onAddAchievement = { placementAchievements.add(it) },
+            onUpdateAchievement = { updated ->
+                val index = placementAchievements.indexOfFirst { it.id == updated.id }
+                if (index >= 0) placementAchievements[index] = updated
+            },
+            onDeleteAchievement = { id -> placementAchievements.removeAll { it.id == id } },
+            onAddCertification = { placementCertifications.add(it) },
+            onUpdateCertification = { updated ->
+                val index = placementCertifications.indexOfFirst { it.id == updated.id }
+                if (index >= 0) placementCertifications[index] = updated
+            },
+            onDeleteCertification = { id -> placementCertifications.removeAll { it.id == id } },
+            onAddLearning = { placementLearning.add(it) },
+            onUpdateLearning = { updated ->
+                val index = placementLearning.indexOfFirst { it.id == updated.id }
+                if (index >= 0) placementLearning[index] = updated
+            },
+            onDeleteLearning = { id -> placementLearning.removeAll { it.id == id } }
+        )
+
     } else if (showInternshipsScreen) {
 
         InternshipsScreen(
@@ -295,6 +374,9 @@ fun HomeScreen() {
             onInternshipsClick = {
                 showInternshipsScreen = true
             },
+            onPlacementClick = {
+                showPlacementScreen = true
+            },
             projectCount = projects.size,
             internshipCount = internships.size
         )
@@ -314,7 +396,8 @@ private fun DashboardScreen(
     onCgpaClick: () -> Unit,
     onDsaClick: () -> Unit,
     onProjectsClick: () -> Unit,
-    onInternshipsClick: () -> Unit
+    onInternshipsClick: () -> Unit,
+    onPlacementClick: () -> Unit
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -588,7 +671,9 @@ private fun DashboardScreen(
         ) {
 
             FeatureCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onPlacementClick() },
                 title = "PLACEMENT",
                 value = "68%",
                 subtitle = "Readiness",
@@ -1404,6 +1489,396 @@ private fun parseAcademicDate(value: String): Pair<String, String>? {
         weekday to value
     } catch (_: Exception) {
         null
+    }
+}
+
+// =========================================================
+// PLACEMENT SCREEN
+// =========================================================
+
+@Composable
+private fun PlacementScreen(
+    currentCgpa: Float,
+    dsaProblems: List<DSAProblem>,
+    projects: List<ProjectItem>,
+    internships: List<InternshipItem>,
+    skills: MutableList<PlacementSkill>,
+    achievements: MutableList<PlacementAchievement>,
+    certifications: MutableList<PlacementCertification>,
+    learning: MutableList<PlacementLearning>,
+    onBack: () -> Unit,
+    onAddSkill: (PlacementSkill) -> Unit,
+    onUpdateSkill: (PlacementSkill) -> Unit,
+    onDeleteSkill: (Long) -> Unit,
+    onAddAchievement: (PlacementAchievement) -> Unit,
+    onUpdateAchievement: (PlacementAchievement) -> Unit,
+    onDeleteAchievement: (Long) -> Unit,
+    onAddCertification: (PlacementCertification) -> Unit,
+    onUpdateCertification: (PlacementCertification) -> Unit,
+    onDeleteCertification: (Long) -> Unit,
+    onAddLearning: (PlacementLearning) -> Unit,
+    onUpdateLearning: (PlacementLearning) -> Unit,
+    onDeleteLearning: (Long) -> Unit
+) {
+    var editor by remember { mutableStateOf<String?>(null) }
+    var editingSkill by remember { mutableStateOf<PlacementSkill?>(null) }
+    var editingAchievement by remember { mutableStateOf<PlacementAchievement?>(null) }
+    var editingCertification by remember { mutableStateOf<PlacementCertification?>(null) }
+    var editingLearning by remember { mutableStateOf<PlacementLearning?>(null) }
+
+    val skillScore = calculateSkillReadiness(skills)
+    val dsaScore = calculateDsaProgress(dsaProblems)
+    val projectScore = calculatePortfolioScore(projects)
+    val internshipScore = calculateInternshipProfileStrength(internships, projects.size)
+    val academicScore = (currentCgpa / 10f * 100f).coerceIn(0f, 100f)
+    val achievementScore = calculateAchievementScore(achievements, certifications, learning)
+    val readiness = calculatePlacementReadiness(
+        academicScore, dsaScore, projectScore, internshipScore, skillScore, achievementScore
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF050507))
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+            Spacer(modifier = Modifier.size(10.dp))
+            Column {
+                Text("PLACEMENT", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+                Text("BUILD • MEASURE • GET READY", color = Color(0xFFFF7B72), fontSize = 8.sp, letterSpacing = 1.5.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+            Column(modifier = Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("PLACEMENT READINESS", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("$readiness / 100", color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
+                Text(placementLabel(readiness), color = placementColor(readiness), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Spacer(modifier = Modifier.height(14.dp))
+                ProgressBar(readiness / 100f)
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("Calculated from your academic, DSA, project, internship and profile data.", color = Color(0xFF777780), fontSize = 9.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(22.dp))
+        SectionTitle("READINESS BREAKDOWN")
+        Spacer(modifier = Modifier.height(12.dp))
+        ReadinessRow("ACADEMICS", academicScore.roundToInt(), Color(0xFFB76CFF))
+        ReadinessRow("DSA", dsaScore.roundToInt(), Color(0xFF00D9FF))
+        ReadinessRow("PROJECTS", projectScore, Color(0xFF65E572))
+        ReadinessRow("INTERNSHIPS", internshipScore, Color(0xFFFFD23F))
+        ReadinessRow("SKILLS", skillScore, Color(0xFFFF4FD8))
+        ReadinessRow("ACHIEVEMENTS", achievementScore, Color(0xFFFF7B72))
+
+        Spacer(modifier = Modifier.height(22.dp))
+        SectionTitle("🧠 SKILLS & COMPETENCIES")
+        Spacer(modifier = Modifier.height(10.dp))
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+            Column(modifier = Modifier.padding(17.dp)) {
+                Text("SKILLS READINESS  $skillScore / 100", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(9.dp))
+                ProgressBar(skillScore / 100f)
+                Spacer(modifier = Modifier.height(12.dp))
+                if (skills.isEmpty()) Text("Add technical, core CS, soft skills and aptitude ratings.", color = Color(0xFF777780), fontSize = 10.sp)
+                else skills.forEach { skill ->
+                    PlacementItemRow(
+                        title = skill.name,
+                        subtitle = "${skill.category} • ${skill.rating}/10",
+                        onEdit = { editingSkill = skill; editor = "SKILL" },
+                        onDelete = { onDeleteSkill(skill.id) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(onClick = { editingSkill = null; editor = "SKILL" }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)), shape = RoundedCornerShape(14.dp)) { Text("+ ADD SKILL", fontWeight = FontWeight.Bold) }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        SectionTitle("🏆 ACHIEVEMENTS")
+        Spacer(modifier = Modifier.height(10.dp))
+        PlacementCollectionCard(
+            emptyText = "Add hackathon wins, competition ranks, academic ranks and other achievements.",
+            buttonText = "+ ADD ACHIEVEMENT",
+            empty = achievements.isEmpty(),
+            onAdd = { editingAchievement = null; editor = "ACHIEVEMENT" }
+        ) {
+            achievements.forEach { item ->
+                PlacementItemRow(item.title, "${item.type} • ${item.position.ifBlank { "Recognition" }} • ${item.year}", { editingAchievement = item; editor = "ACHIEVEMENT" }, { onDeleteAchievement(item.id) })
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        SectionTitle("📜 CERTIFICATIONS")
+        Spacer(modifier = Modifier.height(10.dp))
+        PlacementCollectionCard(
+            emptyText = "Add basic and professional certifications with their issuing organization.",
+            buttonText = "+ ADD CERTIFICATION",
+            empty = certifications.isEmpty(),
+            onAdd = { editingCertification = null; editor = "CERTIFICATION" }
+        ) {
+            certifications.forEach { item ->
+                PlacementItemRow(item.name, "${item.issuer} • ${item.date.ifBlank { "Date not added" }}", { editingCertification = item; editor = "CERTIFICATION" }, { onDeleteCertification(item.id) })
+                if (item.credentialUrl.isNotBlank()) Text(item.credentialUrl, color = Color(0xFF00D9FF), fontSize = 8.sp, modifier = Modifier.padding(start = 8.dp, bottom = 5.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        SectionTitle("🚀 ADDITIONAL LEARNING")
+        Spacer(modifier = Modifier.height(10.dp))
+        PlacementCollectionCard(
+            emptyText = "Track newly learned skills like communication, aptitude, leadership or any technical skill.",
+            buttonText = "+ ADD LEARNING",
+            empty = learning.isEmpty(),
+            onAdd = { editingLearning = null; editor = "LEARNING" }
+        ) {
+            learning.forEach { item ->
+                PlacementItemRow(item.name, "${item.category} • ${item.level}/10", { editingLearning = item; editor = "LEARNING" }, { onDeleteLearning(item.id) })
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        SectionTitle("📰 PLACEMENT UPDATES")
+        Spacer(modifier = Modifier.height(10.dp))
+        PlacementNewsCard("INTERNSHIP / JOB SEARCH", "Keep your application links and deadlines in the Internship module. Live placement-news integration can be connected later.")
+        PlacementNewsCard("PROFILE TIP", "Relevant projects, measurable achievements and strong communication can improve your placement profile.")
+
+        Spacer(modifier = Modifier.height(20.dp))
+        SectionTitle("⚠ AREAS TO IMPROVE")
+        Spacer(modifier = Modifier.height(10.dp))
+        val weakAreas = placementWeakAreas(academicScore, dsaScore, projectScore, internshipScore, skillScore, achievementScore)
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+            Column(modifier = Modifier.padding(17.dp)) {
+                weakAreas.forEachIndexed { index, text ->
+                    Text("${index + 1}. $text", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(vertical = 4.dp))
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF15151B))) {
+            Column(modifier = Modifier.padding(19.dp)) {
+                Text("✦  PRISM PLACEMENT INSIGHT", color = Color(0xFFB76CFF), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(generatePlacementInsight(readiness, dsaScore, projectScore, internshipScore, skillScore), color = Color.White, fontSize = 14.sp, lineHeight = 21.sp)
+            }
+        }
+        Spacer(modifier = Modifier.height(25.dp))
+    }
+
+    when (editor) {
+        "SKILL" -> PlacementSkillEditor(editingSkill, { editor = null }, { onUpdateOrAddSkill(it, editingSkill, onUpdateSkill, onAddSkill); editor = null })
+        "ACHIEVEMENT" -> PlacementAchievementEditor(editingAchievement, { editor = null }, { onUpdateOrAddAchievement(it, editingAchievement, onUpdateAchievement, onAddAchievement); editor = null })
+        "CERTIFICATION" -> PlacementCertificationEditor(editingCertification, { editor = null }, { onUpdateOrAddCertification(it, editingCertification, onUpdateCertification, onAddCertification); editor = null })
+        "LEARNING" -> PlacementLearningEditor(editingLearning, { editor = null }, { onUpdateOrAddLearning(it, editingLearning, onUpdateLearning, onAddLearning); editor = null })
+    }
+}
+
+@Composable
+private fun ReadinessRow(title: String, score: Int, accent: Color) {
+    Column(modifier = Modifier.padding(vertical = 5.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(title, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text("$score%", color = accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(5.dp))
+        ProgressBar(score / 100f)
+    }
+}
+
+@Composable
+private fun PlacementItemRow(title: String, subtitle: String, onEdit: () -> Unit, onDelete: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = Color(0xFF777780), fontSize = 8.sp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedButton(onClick = onEdit, shape = RoundedCornerShape(9.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text("EDIT", fontSize = 7.sp) }
+                OutlinedButton(onClick = onDelete, shape = RoundedCornerShape(9.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text("DEL", fontSize = 7.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlacementCollectionCard(emptyText: String, buttonText: String, empty: Boolean, onAdd: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+        Column(modifier = Modifier.padding(17.dp)) {
+            if (empty) Text(emptyText, color = Color(0xFF777780), fontSize = 10.sp)
+            else content()
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(onClick = onAdd, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)), shape = RoundedCornerShape(14.dp)) { Text(buttonText, fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+@Composable
+private fun PlacementNewsCard(title: String, text: String) {
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+        Column(modifier = Modifier.padding(15.dp)) {
+            Text(title, color = Color(0xFFFFD23F), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Spacer(modifier = Modifier.height(5.dp))
+            Text(text, color = Color.White, fontSize = 10.sp, lineHeight = 15.sp)
+        }
+    }
+}
+
+@Composable
+private fun PlacementSkillEditor(initial: PlacementSkill?, onBack: () -> Unit, onSave: (PlacementSkill) -> Unit) {
+    var name by remember { mutableStateOf(initial?.name ?: "") }
+    var category by remember { mutableStateOf(initial?.category ?: "Technical") }
+    var rating by remember { mutableStateOf(initial?.rating?.toString() ?: "5") }
+    var error by remember { mutableStateOf("") }
+    val categories = listOf("Technical", "Core CS", "Soft Skill", "Aptitude")
+    SimplePlacementEditor(title = if (initial == null) "ADD SKILL" else "EDIT SKILL", subtitle = "SKILLS & COMPETENCIES", onBack = onBack) {
+        OutlinedTextField(name, { name = it; error = "" }, Modifier.fillMaxWidth(), label = { Text("Skill Name") }, placeholder = { Text("Java, Communication, DBMS...") }, singleLine = true)
+        Spacer(Modifier.height(10.dp))
+        Text("CATEGORY", color = Color(0xFF888891), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        categories.forEach { ChoiceButton(it, category == it, { category = it }) }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(rating, { rating = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(), label = { Text("Skill Level (1-10)") }, singleLine = true)
+        if (error.isNotBlank()) Text(error, color = Color(0xFFFF6B6B), fontSize = 10.sp)
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = { val r = rating.toIntOrNull(); if (name.isBlank() || r == null || r !in 1..10) error = "Enter a skill and a rating from 1 to 10." else onSave(PlacementSkill(initial?.id ?: System.currentTimeMillis(), name.trim(), category, r)) }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)), shape = RoundedCornerShape(14.dp)) { Text("SAVE SKILL", fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+private fun PlacementAchievementEditor(initial: PlacementAchievement?, onBack: () -> Unit, onSave: (PlacementAchievement) -> Unit) {
+    var title by remember { mutableStateOf(initial?.title ?: "") }
+    var type by remember { mutableStateOf(initial?.type ?: "Competition") }
+    var position by remember { mutableStateOf(initial?.position ?: "") }
+    var year by remember { mutableStateOf(initial?.year ?: "") }
+    SimplePlacementEditor(title = if (initial == null) "ADD ACHIEVEMENT" else "EDIT ACHIEVEMENT", subtitle = "ACHIEVEMENTS", onBack = onBack) {
+        OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Achievement") }, placeholder = { Text("Hackathon Winner, University Rank...") }, singleLine = true)
+        Spacer(Modifier.height(10.dp))
+        listOf("Competition", "Academic Rank", "Hackathon", "Other").forEach { ChoiceButton(it, type == it, { type = it }) }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(position, { position = it }, Modifier.fillMaxWidth(), label = { Text("Position / Recognition") }, placeholder = { Text("Winner, Rank 3, Finalist...") }, singleLine = true)
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(year, { year = it }, Modifier.fillMaxWidth(), label = { Text("Year") }, singleLine = true)
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = { if (title.isNotBlank()) onSave(PlacementAchievement(initial?.id ?: System.currentTimeMillis(), title.trim(), type, position.trim(), year.trim())) }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)), shape = RoundedCornerShape(14.dp)) { Text("SAVE ACHIEVEMENT", fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+private fun PlacementCertificationEditor(initial: PlacementCertification?, onBack: () -> Unit, onSave: (PlacementCertification) -> Unit) {
+    var name by remember { mutableStateOf(initial?.name ?: "") }
+    var issuer by remember { mutableStateOf(initial?.issuer ?: "") }
+    var date by remember { mutableStateOf(initial?.date ?: "") }
+    var link by remember { mutableStateOf(initial?.credentialUrl ?: "") }
+    SimplePlacementEditor(title = if (initial == null) "ADD CERTIFICATION" else "EDIT CERTIFICATION", subtitle = "CERTIFICATIONS", onBack = onBack) {
+        OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Certification") }, placeholder = { Text("Python, AWS, Google...") }, singleLine = true)
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(issuer, { issuer = it }, Modifier.fillMaxWidth(), label = { Text("Issuing Organization") }, singleLine = true)
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(date, { date = it }, Modifier.fillMaxWidth(), label = { Text("Date") }, singleLine = true)
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(link, { link = it }, Modifier.fillMaxWidth(), label = { Text("Credential / Certificate Link") }, singleLine = true)
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = { if (name.isNotBlank()) onSave(PlacementCertification(initial?.id ?: System.currentTimeMillis(), name.trim(), issuer.trim(), date.trim(), link.trim())) }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)), shape = RoundedCornerShape(14.dp)) { Text("SAVE CERTIFICATION", fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+private fun PlacementLearningEditor(initial: PlacementLearning?, onBack: () -> Unit, onSave: (PlacementLearning) -> Unit) {
+    var name by remember { mutableStateOf(initial?.name ?: "") }
+    var category by remember { mutableStateOf(initial?.category ?: "Technical") }
+    var level by remember { mutableStateOf(initial?.level?.toString() ?: "5") }
+    SimplePlacementEditor(title = if (initial == null) "ADD LEARNING" else "EDIT LEARNING", subtitle = "ADDITIONAL LEARNING", onBack = onBack) {
+        OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Skill / Learning") }, placeholder = { Text("Aptitude, Communication, Kotlin...") }, singleLine = true)
+        Spacer(Modifier.height(10.dp))
+        listOf("Technical", "Communication", "Aptitude", "Leadership", "Other").forEach { ChoiceButton(it, category == it, { category = it }) }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(level, { level = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(), label = { Text("Current Level (1-10)") }, singleLine = true)
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = { val l = level.toIntOrNull()?.coerceIn(1,10) ?: 5; if (name.isNotBlank()) onSave(PlacementLearning(initial?.id ?: System.currentTimeMillis(), name.trim(), category, l)) }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)), shape = RoundedCornerShape(14.dp)) { Text("SAVE LEARNING", fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+private fun SimplePlacementEditor(title: String, subtitle: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color(0xFF050507))) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+                Spacer(Modifier.size(10.dp))
+                Column {
+                    Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text(subtitle, color = Color(0xFFFF7B72), fontSize = 8.sp, letterSpacing = 1.5.sp)
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            content()
+            Spacer(Modifier.height(30.dp))
+        }
+    }
+}
+
+private fun onUpdateOrAddSkill(item: PlacementSkill, old: PlacementSkill?, update: (PlacementSkill) -> Unit, add: (PlacementSkill) -> Unit) { if (old == null) add(item) else update(item) }
+private fun onUpdateOrAddAchievement(item: PlacementAchievement, old: PlacementAchievement?, update: (PlacementAchievement) -> Unit, add: (PlacementAchievement) -> Unit) { if (old == null) add(item) else update(item) }
+private fun onUpdateOrAddCertification(item: PlacementCertification, old: PlacementCertification?, update: (PlacementCertification) -> Unit, add: (PlacementCertification) -> Unit) { if (old == null) add(item) else update(item) }
+private fun onUpdateOrAddLearning(item: PlacementLearning, old: PlacementLearning?, update: (PlacementLearning) -> Unit, add: (PlacementLearning) -> Unit) { if (old == null) add(item) else update(item) }
+
+private fun calculateSkillReadiness(skills: List<PlacementSkill>): Int {
+    if (skills.isEmpty()) return 0
+    return (skills.map { it.rating }.average() * 10).roundToInt().coerceIn(0, 100)
+}
+
+private fun calculateAchievementScore(achievements: List<PlacementAchievement>, certifications: List<PlacementCertification>, learning: List<PlacementLearning>): Int {
+    val achievementPart = (achievements.size.coerceAtMost(5) / 5f) * 40f
+    val certPart = (certifications.size.coerceAtMost(5) / 5f) * 30f
+    val learningPart = if (learning.isEmpty()) 0f else (learning.map { it.level }.average().toFloat() / 10f) * 30f
+    return (achievementPart + certPart + learningPart).roundToInt().coerceIn(0, 100)
+}
+
+private fun calculatePlacementReadiness(academic: Float, dsa: Float, projects: Int, internships: Int, skills: Int, achievements: Int): Int {
+    return (academic * .20f + dsa * .20f + projects * .20f + internships * .15f + skills * .15f + achievements * .10f).roundToInt().coerceIn(0,100)
+}
+
+private fun placementLabel(score: Int): String = when {
+    score >= 90 -> "EXCEPTIONAL"
+    score >= 80 -> "STRONG"
+    score >= 65 -> "GOOD"
+    score >= 50 -> "DEVELOPING"
+    else -> "NEEDS WORK"
+}
+
+private fun placementColor(score: Int): Color = when {
+    score >= 80 -> Color(0xFF65E572)
+    score >= 65 -> Color(0xFF00D9FF)
+    score >= 50 -> Color(0xFFFFD23F)
+    else -> Color(0xFFFF7B72)
+}
+
+private fun placementWeakAreas(academic: Float, dsa: Float, projects: Int, internships: Int, skills: Int, achievements: Int): List<String> {
+    val areas = mutableListOf<Pair<String, Int>>()
+    areas += "Academics" to academic.roundToInt()
+    areas += "DSA" to dsa.roundToInt()
+    areas += "Projects" to projects
+    areas += "Internships" to internships
+    areas += "Skills" to skills
+    areas += "Achievements & certifications" to achievements
+    return areas.sortedBy { it.second }.take(3).map { it.first + " needs more attention." }
+}
+
+private fun generatePlacementInsight(readiness: Int, dsa: Float, projects: Int, internships: Int, skills: Int): String {
+    return when {
+        readiness < 50 -> "Your placement profile is still developing. Start with DSA consistency, one strong project and a broader set of relevant skills."
+        dsa < 60 -> "Your project profile is a useful base, but DSA is currently limiting your placement readiness. Focus on medium and hard problems consistently."
+        projects < 2 -> "Your preparation is progressing, but your project portfolio needs more depth. Build at least one strong, documented real-world project."
+        internships < 50 -> "Your internship activity is currently limited. Increase relevant applications and build interview exposure while maintaining your technical preparation."
+        skills < 60 -> "Your placement profile would benefit from stronger skill coverage. Add core CS, aptitude and communication preparation alongside technical skills."
+        else -> "Your profile is becoming placement-ready. Keep improving the weakest area, maintain DSA consistency and continue adding measurable achievements."
     }
 }
 
