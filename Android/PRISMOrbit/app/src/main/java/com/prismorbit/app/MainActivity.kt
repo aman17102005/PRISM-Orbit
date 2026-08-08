@@ -23,6 +23,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.prismorbit.app.ui.theme.PRISMOrbitTheme
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
 
 class MainActivity : ComponentActivity() {
 
@@ -30,15 +34,32 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
+
+            var showHomeScreen by remember {
+                mutableStateOf(false)
+            }
+
             PRISMOrbitTheme {
-                OpeningScreen()
+
+                if (showHomeScreen) {
+
+                    HomeScreen()
+
+                } else {
+
+                    OpeningScreen(
+                        onFinished = {
+                            showHomeScreen = true
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun OpeningScreen() {
+fun OpeningScreen(onFinished: () -> Unit) {
 
     val animation = remember {
         Animatable(0f)
@@ -55,6 +76,7 @@ fun OpeningScreen() {
         )
 
         delay(1000)
+        onFinished()
     }
 
     val progress = animation.value
