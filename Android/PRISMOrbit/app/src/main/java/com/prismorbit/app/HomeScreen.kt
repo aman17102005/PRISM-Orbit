@@ -1,6 +1,11 @@
 package com.prismorbit.app
 
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +43,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -70,6 +76,27 @@ data class AcademicEvent(
 )
 
 
+data class ProjectTask(
+    val id: Long = System.currentTimeMillis() + kotlin.random.Random.nextLong(0, 100000),
+    val title: String,
+    val completed: Boolean = false
+)
+
+data class ProjectItem(
+    val id: Long = System.currentTimeMillis(),
+    val name: String,
+    val description: String,
+    val techStack: String,
+    val startDate: String,
+    val status: String,
+    val githubUrl: String,
+    val liveUrl: String,
+    val progress: Int,
+    val tasks: List<ProjectTask> = emptyList(),
+    val photos: List<String> = emptyList()
+)
+
+
 // =========================================================
 // HOME SCREEN
 // =========================================================
@@ -91,6 +118,14 @@ fun HomeScreen() {
 
     var showDsaScreen by remember {
         mutableStateOf(false)
+    }
+
+    var showProjectsScreen by remember {
+        mutableStateOf(false)
+    }
+
+    val projects = remember {
+        mutableStateListOf<ProjectItem>()
     }
 
     val academicEvents = remember {
@@ -182,6 +217,19 @@ fun HomeScreen() {
             }
         )
 
+    } else if (showProjectsScreen) {
+
+        ProjectsScreen(
+            projects = projects,
+            onBack = { showProjectsScreen = false },
+            onAddProject = { projects.add(it) },
+            onUpdateProject = { updated ->
+                val index = projects.indexOfFirst { it.id == updated.id }
+                if (index >= 0) projects[index] = updated
+            },
+            onDeleteProject = { id -> projects.removeAll { it.id == id } }
+        )
+
     } else if (showDsaScreen) {
 
         DSAScreen(
@@ -203,7 +251,11 @@ fun HomeScreen() {
             },
             onDsaClick = {
                 showDsaScreen = true
-            }
+            },
+            onProjectsClick = {
+                showProjectsScreen = true
+            },
+            projectCount = projects.size
         )
     }
 }
@@ -216,8 +268,10 @@ fun HomeScreen() {
 @Composable
 private fun DashboardScreen(
     dsaProblems: List<DSAProblem>,
+    projectCount: Int,
     onCgpaClick: () -> Unit,
-    onDsaClick: () -> Unit
+    onDsaClick: () -> Unit,
+    onProjectsClick: () -> Unit
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -457,10 +511,12 @@ private fun DashboardScreen(
         ) {
 
             FeatureCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onProjectsClick() },
                 title = "PROJECTS",
-                value = "6",
-                subtitle = "Portfolio",
+                value = projectCount.toString(),
+                subtitle = "Tap to explore",
                 accent = Color(0xFF65E572)
             )
 
@@ -1304,6 +1360,352 @@ private fun parseAcademicDate(value: String): Pair<String, String>? {
     } catch (_: Exception) {
         null
     }
+}
+
+// =========================================================
+// PROJECTS SCREEN
+// =========================================================
+
+@Composable
+private fun ProjectsScreen(
+    projects: MutableList<ProjectItem>,
+    onBack: () -> Unit,
+    onAddProject: (ProjectItem) -> Unit,
+    onUpdateProject: (ProjectItem) -> Unit,
+    onDeleteProject: (Long) -> Unit
+) {
+    var showAddProject by remember { mutableStateOf(false) }
+    var editingProject by remember { mutableStateOf<ProjectItem?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF050507))
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+            Spacer(modifier = Modifier.size(10.dp))
+            Column {
+                Text("PROJECTS", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+                Text("BUILD • DOCUMENT • SHOWCASE", color = Color(0xFF65E572), fontSize = 8.sp, letterSpacing = 1.5.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        val completedProjects = projects.count { it.status == "COMPLETED" }
+        val averageProgress = if (projects.isEmpty()) 0 else projects.map { it.progress }.average().roundToInt()
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SmallStatCard(Modifier.weight(1f), "PROJECTS", projects.size.toString())
+            SmallStatCard(Modifier.weight(1f), "COMPLETED", completedProjects.toString())
+            SmallStatCard(Modifier.weight(1f), "AVG PROGRESS", "$averageProgress%")
+        }
+
+        Spacer(modifier = Modifier.height(22.dp))
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text("PORTFOLIO SCORE", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("${calculatePortfolioScore(projects)} / 100", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(10.dp))
+                ProgressBar(calculatePortfolioScore(projects) / 100f)
+                Spacer(modifier = Modifier.height(7.dp))
+                Text("Based on completion, tasks, tech stack, GitHub, live demo, documentation and photos.", color = Color(0xFF777780), fontSize = 9.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(22.dp))
+        SectionTitle("YOUR PROJECTS")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (projects.isEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("NO PROJECTS YET", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Add your projects, tasks, links and project photos here.", color = Color(0xFF777780), fontSize = 10.sp)
+                }
+            }
+        } else {
+            projects.forEach { project ->
+                ProjectCard(
+                    project = project,
+                    onEdit = { editingProject = project },
+                    onDelete = { onDeleteProject(project.id) },
+                    onToggleTask = { taskId ->
+                        onUpdateProject(project.copy(tasks = project.tasks.map { task ->
+                            if (task.id == taskId) task.copy(completed = !task.completed) else task
+                        }))
+                    }
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+        Button(onClick = { showAddProject = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF65A96B)), shape = RoundedCornerShape(16.dp)) {
+            Text("+  ADD PROJECT", fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(25.dp))
+    }
+
+    if (showAddProject) {
+        ProjectEditorScreen(
+            initialProject = null,
+            onBack = { showAddProject = false },
+            onSave = { onAddProject(it); showAddProject = false }
+        )
+    }
+
+    editingProject?.let { project ->
+        ProjectEditorScreen(
+            initialProject = project,
+            onBack = { editingProject = null },
+            onSave = { onUpdateProject(it); editingProject = null }
+        )
+    }
+}
+
+@Composable
+private fun ProjectCard(
+    project: ProjectItem,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onToggleTask: (Long) -> Unit
+) {
+    val completedTasks = project.tasks.count { it.completed }
+    val taskTotal = project.tasks.size
+
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+        Column(modifier = Modifier.padding(17.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(project.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(project.status, color = Color(0xFF65E572), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                }
+                Text("${project.progress}%", color = Color(0xFF65E572), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+            if (project.description.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(project.description, color = Color(0xFF888891), fontSize = 10.sp, lineHeight = 15.sp)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            ProgressBar(project.progress / 100f)
+            Spacer(modifier = Modifier.height(10.dp))
+            Text("Tech: ${project.techStack.ifBlank { "Not added" }}", color = Color(0xFFB76CFF), fontSize = 9.sp)
+            Text("Started: ${project.startDate.ifBlank { "Not added" }}", color = Color(0xFF777780), fontSize = 9.sp)
+            Text("Tasks: $completedTasks / $taskTotal", color = Color(0xFF777780), fontSize = 9.sp)
+            Text("Photos: ${project.photos.size}", color = Color(0xFF777780), fontSize = 9.sp)
+
+            if (project.photos.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                ProjectPhotoGrid(project.photos, onRemove = {})
+            }
+
+            if (project.tasks.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                project.tasks.forEach { task ->
+                    Row(modifier = Modifier.fillMaxWidth().clickable { onToggleTask(task.id) }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (task.completed) "☑" else "☐", color = if (task.completed) Color(0xFF65E572) else Color(0xFF777780), fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(7.dp))
+                        Text(task.title, color = if (task.completed) Color(0xFF777780) else Color.White, fontSize = 9.sp)
+                    }
+                }
+            }
+
+            if (project.githubUrl.isNotBlank() || project.liveUrl.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Links: ${listOf(project.githubUrl, project.liveUrl).filter { it.isNotBlank() }.joinToString("  •  ")}", color = Color(0xFF00D9FF), fontSize = 8.sp)
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("EDIT", fontSize = 9.sp) }
+                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("DELETE", fontSize = 9.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectEditorScreen(
+    initialProject: ProjectItem?,
+    onBack: () -> Unit,
+    onSave: (ProjectItem) -> Unit
+) {
+    var name by remember { mutableStateOf(initialProject?.name ?: "") }
+    var description by remember { mutableStateOf(initialProject?.description ?: "") }
+    var techStack by remember { mutableStateOf(initialProject?.techStack ?: "") }
+    var startDate by remember { mutableStateOf(initialProject?.startDate ?: "") }
+    var status by remember { mutableStateOf(initialProject?.status ?: "IDEA") }
+    var githubUrl by remember { mutableStateOf(initialProject?.githubUrl ?: "") }
+    var liveUrl by remember { mutableStateOf(initialProject?.liveUrl ?: "") }
+    var progressText by remember { mutableStateOf(initialProject?.progress?.toString() ?: "0") }
+    var taskText by remember { mutableStateOf(initialProject?.tasks?.joinToString("\n") { it.title } ?: "") }
+    var photos by remember { mutableStateOf(initialProject?.photos ?: emptyList()) }
+    var error by remember { mutableStateOf("") }
+
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isNotEmpty()) photos = (photos + uris.map(Uri::toString)).distinct()
+    }
+
+    val statuses = listOf("IDEA", "PLANNING", "IN PROGRESS", "COMPLETED", "ARCHIVED")
+    val progress = progressText.toIntOrNull()?.coerceIn(0, 100) ?: 0
+
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF050507))) {
+        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+                Spacer(modifier = Modifier.size(10.dp))
+                Column {
+                    Text(if (initialProject == null) "ADD PROJECT" else "EDIT PROJECT", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text("PROJECT PORTFOLIO", color = Color(0xFF65E572), fontSize = 8.sp, letterSpacing = 1.5.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            OutlinedTextField(name, { name = it; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("Project Name") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(description, { description = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, minLines = 3)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(techStack, { techStack = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Tech Stack") }, placeholder = { Text("Kotlin, Compose, Firebase...") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(startDate, { startDate = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Start Date") }, placeholder = { Text("DD/MM/YYYY") }, singleLine = true)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SectionTitle("STATUS")
+            Spacer(modifier = Modifier.height(8.dp))
+            statuses.forEach { option ->
+                ChoiceButton(option, status == option) { status = option }
+                Spacer(modifier = Modifier.height(7.dp))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(githubUrl, { githubUrl = it }, modifier = Modifier.fillMaxWidth(), label = { Text("GitHub URL") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(liveUrl, { liveUrl = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Live Demo URL") }, singleLine = true)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SectionTitle("PROGRESS")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(progressText, { progressText = it.filter(Char::isDigit).take(3) }, modifier = Modifier.fillMaxWidth(), label = { Text("Progress (0–100)") }, singleLine = true)
+            Spacer(modifier = Modifier.height(8.dp))
+            ProgressBar(progress / 100f)
+
+            Spacer(modifier = Modifier.height(18.dp))
+            SectionTitle("TASKS")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(taskText, { taskText = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Tasks — one per line") }, placeholder = { Text("Design UI\nBuild backend\nTesting\nDeploy") }, minLines = 4)
+
+            Spacer(modifier = Modifier.height(18.dp))
+            SectionTitle("PROJECT PHOTOS")
+            Spacer(modifier = Modifier.height(5.dp))
+            Text("Add screenshots, UI photos, certificates or project pictures. You can select multiple photos at once.", color = Color(0xFF777780), fontSize = 9.sp)
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(onClick = { photoPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15151B)), shape = RoundedCornerShape(14.dp)) {
+                Text("+  ADD PROJECT PHOTOS", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            ProjectPhotoGrid(photos, onRemove = { photo -> photos = photos.filterNot { it == photo } })
+
+            if (error.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(error, color = Color(0xFFFF6B6B), fontSize = 10.sp)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Button(
+                onClick = {
+                    if (name.trim().isEmpty()) {
+                        error = "Please enter a project name."
+                    } else {
+                        val tasks = taskText.lines().map { it.trim() }.filter { it.isNotEmpty() }.mapIndexed { index, title ->
+                            val old = initialProject?.tasks?.getOrNull(index)
+                            ProjectTask(id = old?.id ?: (System.currentTimeMillis() + index), title = title, completed = old?.completed ?: false)
+                        }
+                        onSave(
+                            ProjectItem(
+                                id = initialProject?.id ?: System.currentTimeMillis(),
+                                name = name.trim(),
+                                description = description.trim(),
+                                techStack = techStack.trim(),
+                                startDate = startDate.trim(),
+                                status = status,
+                                githubUrl = githubUrl.trim(),
+                                liveUrl = liveUrl.trim(),
+                                progress = progress,
+                                tasks = tasks,
+                                photos = photos
+                            )
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF65A96B)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("SAVE PROJECT", fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(30.dp))
+        }
+    }
+}
+
+@Composable
+private fun ProjectPhotoGrid(photos: List<String>, onRemove: (String) -> Unit) {
+    if (photos.isEmpty()) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+            Box(modifier = Modifier.fillMaxWidth().height(90.dp), contentAlignment = Alignment.Center) {
+                Text("No project photos added", color = Color(0xFF777780), fontSize = 10.sp)
+            }
+        }
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        photos.chunked(2).forEach { rowPhotos ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                rowPhotos.forEach { uriString ->
+                    ProjectPhotoItem(uriString, Modifier.weight(1f), { onRemove(uriString) })
+                }
+                if (rowPhotos.size == 1) Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectPhotoItem(uriString: String, modifier: Modifier, onRemove: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val bitmap = remember(uriString) {
+        runCatching {
+            context.contentResolver.openInputStream(Uri.parse(uriString))?.use { BitmapFactory.decodeStream(it) }
+        }.getOrNull()
+    }
+
+    Box(modifier = modifier.height(130.dp).background(Color(0xFF111116), RoundedCornerShape(14.dp))) {
+        if (bitmap != null) {
+            Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Project photo", modifier = Modifier.fillMaxSize())
+        } else {
+            Text("Photo unavailable", color = Color(0xFF777780), fontSize = 9.sp, modifier = Modifier.align(Alignment.Center))
+        }
+        Text("×", color = Color.White, fontSize = 20.sp, modifier = Modifier.align(Alignment.TopEnd).padding(5.dp).clickable { onRemove() })
+    }
+}
+
+private fun calculatePortfolioScore(projects: List<ProjectItem>): Int {
+    if (projects.isEmpty()) return 0
+    val averageProgress = projects.map { it.progress }.average()
+    val completionScore = projects.count { it.status == "COMPLETED" }.toFloat() / projects.size * 20f
+    val techScore = projects.count { it.techStack.isNotBlank() }.toFloat() / projects.size * 15f
+    val githubScore = projects.count { it.githubUrl.isNotBlank() }.toFloat() / projects.size * 15f
+    val liveScore = projects.count { it.liveUrl.isNotBlank() }.toFloat() / projects.size * 15f
+    val photoScore = projects.count { it.photos.isNotEmpty() }.toFloat() / projects.size * 5f
+    val progressScore = averageProgress * 0.30f
+    return (completionScore + techScore + githubScore + liveScore + photoScore + progressScore).roundToInt().coerceIn(0, 100)
 }
 
 // =========================================================
