@@ -97,6 +97,21 @@ data class ProjectItem(
 )
 
 
+data class InternshipItem(
+    val id: Long = System.currentTimeMillis() + kotlin.random.Random.nextLong(0, 100000),
+    val company: String,
+    val role: String,
+    val location: String,
+    val applicationDate: String,
+    val interviewDate: String,
+    val offerDate: String,
+    val stipend: String,
+    val status: String,
+    val jobUrl: String,
+    val notes: String
+)
+
+
 // =========================================================
 // HOME SCREEN
 // =========================================================
@@ -126,6 +141,14 @@ fun HomeScreen() {
 
     val projects = remember {
         mutableStateListOf<ProjectItem>()
+    }
+
+    var showInternshipsScreen by remember {
+        mutableStateOf(false)
+    }
+
+    val internships = remember {
+        mutableStateListOf<InternshipItem>()
     }
 
     val academicEvents = remember {
@@ -217,6 +240,20 @@ fun HomeScreen() {
             }
         )
 
+    } else if (showInternshipsScreen) {
+
+        InternshipsScreen(
+            internships = internships,
+            projectCount = projects.size,
+            onBack = { showInternshipsScreen = false },
+            onAddInternship = { internships.add(it) },
+            onUpdateInternship = { updated ->
+                val index = internships.indexOfFirst { it.id == updated.id }
+                if (index >= 0) internships[index] = updated
+            },
+            onDeleteInternship = { id -> internships.removeAll { it.id == id } }
+        )
+
     } else if (showProjectsScreen) {
 
         ProjectsScreen(
@@ -255,7 +292,11 @@ fun HomeScreen() {
             onProjectsClick = {
                 showProjectsScreen = true
             },
-            projectCount = projects.size
+            onInternshipsClick = {
+                showInternshipsScreen = true
+            },
+            projectCount = projects.size,
+            internshipCount = internships.size
         )
     }
 }
@@ -269,9 +310,11 @@ fun HomeScreen() {
 private fun DashboardScreen(
     dsaProblems: List<DSAProblem>,
     projectCount: Int,
+    internshipCount: Int,
     onCgpaClick: () -> Unit,
     onDsaClick: () -> Unit,
-    onProjectsClick: () -> Unit
+    onProjectsClick: () -> Unit,
+    onInternshipsClick: () -> Unit
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -521,10 +564,12 @@ private fun DashboardScreen(
             )
 
             FeatureCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onInternshipsClick() },
                 title = "INTERNSHIPS",
-                value = "2",
-                subtitle = "Experience",
+                value = internshipCount.toString(),
+                subtitle = "Tap to explore",
                 accent = Color(0xFFFFD23F)
             )
         }
@@ -1706,6 +1751,395 @@ private fun calculatePortfolioScore(projects: List<ProjectItem>): Int {
     val photoScore = projects.count { it.photos.isNotEmpty() }.toFloat() / projects.size * 5f
     val progressScore = averageProgress * 0.30f
     return (completionScore + techScore + githubScore + liveScore + photoScore + progressScore).roundToInt().coerceIn(0, 100)
+}
+
+// =========================================================
+// INTERNSHIPS SCREEN
+// =========================================================
+
+@Composable
+private fun InternshipsScreen(
+    internships: MutableList<InternshipItem>,
+    projectCount: Int,
+    onBack: () -> Unit,
+    onAddInternship: (InternshipItem) -> Unit,
+    onUpdateInternship: (InternshipItem) -> Unit,
+    onDeleteInternship: (Long) -> Unit
+) {
+    var showAdd by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<InternshipItem?>(null) }
+
+    val successRate = calculateInternshipSuccessRate(internships)
+    val profileStrength = calculateInternshipProfileStrength(internships, projectCount)
+    val selected = internships.count { it.status == "SELECTED" }
+    val rejected = internships.count { it.status == "REJECTED" }
+    val active = internships.count {
+        it.status == "INTERESTED" ||
+                it.status == "APPLIED" ||
+                it.status == "ASSESSMENT" ||
+                it.status == "INTERVIEW"
+    }
+    val interviews = internships.count { it.status == "INTERVIEW" || it.status == "SELECTED" }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF050507))
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+            Spacer(modifier = Modifier.size(10.dp))
+            Column {
+                Text("INTERNSHIPS", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
+                Text("APPLY • INTERVIEW • GROW", color = Color(0xFFFFD23F), fontSize = 8.sp, letterSpacing = 1.7.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("INTERNSHIP PROFILE STRENGTH", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.7.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                    Text("$profileStrength / 100", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                    Text(profileStrengthLabel(profileStrength), color = profileStrengthColor(profileStrength), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                ProgressBar(profileStrength / 100f)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Calculated by PRISM from application activity, interview progress, outcomes, profile completeness and project readiness.",
+                    color = Color(0xFF777780),
+                    fontSize = 9.sp,
+                    lineHeight = 14.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SmallStatCard(Modifier.weight(1f), "APPLICATIONS", internships.size.toString())
+            SmallStatCard(Modifier.weight(1f), "ACTIVE", active.toString())
+            SmallStatCard(Modifier.weight(1f), "INTERVIEWS", interviews.toString())
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SmallStatCard(Modifier.weight(1f), "SELECTED", selected.toString())
+            SmallStatCard(Modifier.weight(1f), "REJECTED", rejected.toString())
+            SmallStatCard(Modifier.weight(1f), "SUCCESS RATE", if (selected + rejected == 0) "—" else "$successRate%")
+        }
+
+        Spacer(modifier = Modifier.height(22.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text("HOW PRISM READS YOUR PROFILE", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Spacer(modifier = Modifier.height(10.dp))
+                InternshipInsightLine("Applications submitted", internships.size >= 3)
+                InternshipInsightLine("Interview exposure", interviews >= 2)
+                InternshipInsightLine("Project foundation", projectCount >= 2)
+                InternshipInsightLine("Profile completeness", internships.any { it.role.isNotBlank() && it.applicationDate.isNotBlank() && it.jobUrl.isNotBlank() })
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    generateInternshipInsight(internships, projectCount),
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(22.dp))
+        SectionTitle("YOUR APPLICATIONS")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (internships.isEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("NO APPLICATIONS YET", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Add internships and PRISM will calculate your success rate and profile strength automatically.", color = Color(0xFF777780), fontSize = 10.sp, lineHeight = 14.sp)
+                }
+            }
+        } else {
+            internships.forEach { internship ->
+                InternshipCard(
+                    internship = internship,
+                    onEdit = { editing = internship },
+                    onDelete = { onDeleteInternship(internship.id) }
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+        Button(
+            onClick = { showAdd = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB28A2E)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text("+  ADD INTERNSHIP", fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(25.dp))
+    }
+
+    if (showAdd) {
+        InternshipEditorScreen(
+            initialInternship = null,
+            onBack = { showAdd = false },
+            onSave = { onAddInternship(it); showAdd = false }
+        )
+    }
+
+    editing?.let { internship ->
+        InternshipEditorScreen(
+            initialInternship = internship,
+            onBack = { editing = null },
+            onSave = { onUpdateInternship(it); editing = null }
+        )
+    }
+}
+
+@Composable
+private fun InternshipCard(
+    internship: InternshipItem,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val statusColor = when (internship.status) {
+        "SELECTED" -> Color(0xFF65E572)
+        "REJECTED" -> Color(0xFFFF7B72)
+        "INTERVIEW" -> Color(0xFF00D9FF)
+        else -> Color(0xFFFFD23F)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+    ) {
+        Column(modifier = Modifier.padding(17.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(internship.company, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(internship.role.ifBlank { "Role not added" }, color = Color(0xFF888891), fontSize = 10.sp)
+                }
+                Text(internship.status, color = statusColor, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text("Applied: ${internship.applicationDate.ifBlank { "Not added" }}", color = Color(0xFF777780), fontSize = 9.sp)
+            if (internship.location.isNotBlank()) Text("Location: ${internship.location}", color = Color(0xFF777780), fontSize = 9.sp)
+            if (internship.stipend.isNotBlank()) Text("Stipend: ${internship.stipend}", color = Color(0xFF777780), fontSize = 9.sp)
+            if (internship.interviewDate.isNotBlank()) Text("Interview: ${internship.interviewDate}", color = Color(0xFF00D9FF), fontSize = 9.sp)
+            if (internship.offerDate.isNotBlank()) Text("Offer: ${internship.offerDate}", color = Color(0xFF65E572), fontSize = 9.sp)
+            if (internship.notes.isNotBlank()) {
+                Spacer(modifier = Modifier.height(7.dp))
+                Text(internship.notes, color = Color(0xFF888891), fontSize = 9.sp, lineHeight = 14.sp)
+            }
+            if (internship.jobUrl.isNotBlank()) {
+                Spacer(modifier = Modifier.height(5.dp))
+                Text("Job link saved", color = Color(0xFFB76CFF), fontSize = 9.sp)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("EDIT", fontSize = 9.sp) }
+                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("DELETE", fontSize = 9.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InternshipEditorScreen(
+    initialInternship: InternshipItem?,
+    onBack: () -> Unit,
+    onSave: (InternshipItem) -> Unit
+) {
+    var company by remember { mutableStateOf(initialInternship?.company ?: "") }
+    var role by remember { mutableStateOf(initialInternship?.role ?: "") }
+    var location by remember { mutableStateOf(initialInternship?.location ?: "") }
+    var applicationDate by remember { mutableStateOf(initialInternship?.applicationDate ?: "") }
+    var interviewDate by remember { mutableStateOf(initialInternship?.interviewDate ?: "") }
+    var offerDate by remember { mutableStateOf(initialInternship?.offerDate ?: "") }
+    var stipend by remember { mutableStateOf(initialInternship?.stipend ?: "") }
+    var status by remember { mutableStateOf(initialInternship?.status ?: "INTERESTED") }
+    var jobUrl by remember { mutableStateOf(initialInternship?.jobUrl ?: "") }
+    var notes by remember { mutableStateOf(initialInternship?.notes ?: "") }
+    var error by remember { mutableStateOf("") }
+
+    val statuses = listOf("INTERESTED", "APPLIED", "ASSESSMENT", "INTERVIEW", "SELECTED", "REJECTED", "WITHDRAWN")
+
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF050507))) {
+        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+                Spacer(modifier = Modifier.size(10.dp))
+                Column {
+                    Text(if (initialInternship == null) "ADD INTERNSHIP" else "EDIT INTERNSHIP", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text("INTERNSHIP TRACKER", color = Color(0xFFFFD23F), fontSize = 8.sp, letterSpacing = 1.5.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            OutlinedTextField(company, { company = it; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("Company") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(role, { role = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Role") }, placeholder = { Text("Android Intern, SDE Intern...") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(location, { location = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Location / Remote") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(applicationDate, { applicationDate = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Application Date") }, placeholder = { Text("DD/MM/YYYY") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(interviewDate, { interviewDate = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Interview Date (optional)") }, placeholder = { Text("DD/MM/YYYY") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(offerDate, { offerDate = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Offer Date (optional)") }, placeholder = { Text("DD/MM/YYYY") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(stipend, { stipend = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Stipend (optional)") }, singleLine = true)
+
+            Spacer(modifier = Modifier.height(16.dp))
+            SectionTitle("APPLICATION STATUS")
+            Spacer(modifier = Modifier.height(8.dp))
+            statuses.forEach { option ->
+                ChoiceButton(option, status == option) { status = option }
+                Spacer(modifier = Modifier.height(7.dp))
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(jobUrl, { jobUrl = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Job / Application URL") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(notes, { notes = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes") }, placeholder = { Text("Rounds, requirements, preparation notes...") }, minLines = 4)
+
+            if (error.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(error, color = Color(0xFFFF6B6B), fontSize = 10.sp)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Button(
+                onClick = {
+                    if (company.trim().isEmpty()) {
+                        error = "Please enter a company name."
+                    } else {
+                        onSave(
+                            InternshipItem(
+                                id = initialInternship?.id ?: (System.currentTimeMillis() + kotlin.random.Random.nextLong(0, 100000)),
+                                company = company.trim(),
+                                role = role.trim(),
+                                location = location.trim(),
+                                applicationDate = applicationDate.trim(),
+                                interviewDate = interviewDate.trim(),
+                                offerDate = offerDate.trim(),
+                                stipend = stipend.trim(),
+                                status = status,
+                                jobUrl = jobUrl.trim(),
+                                notes = notes.trim()
+                            )
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB28A2E)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("SAVE INTERNSHIP", fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(30.dp))
+        }
+    }
+}
+
+@Composable
+private fun InternshipInsightLine(label: String, achieved: Boolean) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(if (achieved) "✓" else "○", color = if (achieved) Color(0xFF65E572) else Color(0xFF777780), fontSize = 13.sp)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(label, color = if (achieved) Color.White else Color(0xFF777780), fontSize = 10.sp)
+    }
+}
+
+private fun calculateInternshipSuccessRate(internships: List<InternshipItem>): Int {
+    val selected = internships.count { it.status == "SELECTED" }
+    val rejected = internships.count { it.status == "REJECTED" }
+    val decided = selected + rejected
+    if (decided == 0) return 0
+    return (selected.toFloat() / decided.toFloat() * 100f).roundToInt().coerceIn(0, 100)
+}
+
+private fun calculateInternshipProfileStrength(
+    internships: List<InternshipItem>,
+    projectCount: Int
+): Int {
+    if (internships.isEmpty() && projectCount == 0) return 0
+
+    val applicationActivity = (internships.size / 10f).coerceIn(0f, 1f) * 25f
+    val interviewExposure = (internships.count { it.status == "INTERVIEW" || it.status == "SELECTED" } / 5f).coerceIn(0f, 1f) * 20f
+    val outcomeExperience = (internships.count { it.status == "SELECTED" } / 2f).coerceIn(0f, 1f) * 20f
+    val projectFoundation = (projectCount / 4f).coerceIn(0f, 1f) * 20f
+
+    val completeProfiles = internships.count {
+        it.company.isNotBlank() &&
+                it.role.isNotBlank() &&
+                it.applicationDate.isNotBlank() &&
+                it.jobUrl.isNotBlank()
+    }
+    val profileCompleteness = if (internships.isEmpty()) 0f else (completeProfiles.toFloat() / internships.size) * 15f
+
+    return (applicationActivity + interviewExposure + outcomeExperience + projectFoundation + profileCompleteness)
+        .roundToInt()
+        .coerceIn(0, 100)
+}
+
+private fun profileStrengthLabel(score: Int): String = when {
+    score >= 85 -> "EXCELLENT"
+    score >= 70 -> "STRONG"
+    score >= 50 -> "GOOD"
+    score >= 30 -> "DEVELOPING"
+    else -> "STARTING"
+}
+
+private fun profileStrengthColor(score: Int): Color = when {
+    score >= 70 -> Color(0xFF65E572)
+    score >= 50 -> Color(0xFFFFD23F)
+    else -> Color(0xFFFF7B72)
+}
+
+private fun generateInternshipInsight(
+    internships: List<InternshipItem>,
+    projectCount: Int
+): String {
+    if (internships.isEmpty()) {
+        return if (projectCount >= 2) {
+            "Your project foundation is ready. Start applying consistently so PRISM can build a meaningful internship profile."
+        } else {
+            "Start by adding a few real applications and building project experience. PRISM will analyse your profile as your data grows."
+        }
+    }
+
+    val selected = internships.count { it.status == "SELECTED" }
+    val rejected = internships.count { it.status == "REJECTED" }
+    val interviews = internships.count { it.status == "INTERVIEW" || it.status == "SELECTED" }
+
+    return when {
+        selected > 0 -> "You have a successful internship outcome. Keep applying to stronger roles and turn the experience into measurable portfolio value."
+        interviews == 0 -> "Your next priority is interview exposure. Keep applying and prepare your DSA, projects and interview fundamentals alongside applications."
+        rejected > selected && interviews > 0 -> "You are getting interview exposure. Review rejected rounds, improve weak areas and keep the application pipeline active."
+        else -> "Your internship pipeline is developing. Keep your applications, interview activity and project profile moving together."
+    }
 }
 
 // =========================================================
