@@ -1,6 +1,7 @@
 package com.prismorbit.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,10 +15,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -28,6 +36,38 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun HomeScreen() {
+
+    var showCgpaScreen by remember {
+        mutableStateOf(false)
+    }
+
+    if (showCgpaScreen) {
+
+        CGPAScreen(
+            onBack = {
+                showCgpaScreen = false
+            }
+        )
+
+    } else {
+
+        DashboardScreen(
+            onCgpaClick = {
+                showCgpaScreen = true
+            }
+        )
+    }
+}
+
+
+// =========================================================
+// DASHBOARD
+// =========================================================
+
+@Composable
+private fun DashboardScreen(
+    onCgpaClick: () -> Unit
+) {
 
     val background = Color(0xFF050507)
 
@@ -73,8 +113,6 @@ fun HomeScreen() {
                     letterSpacing = 2.sp
                 )
             }
-
-            // Profile Circle
 
             Box(
                 modifier = Modifier
@@ -184,8 +222,6 @@ fun HomeScreen() {
                     modifier = Modifier.height(15.dp)
                 )
 
-                // Progress background
-
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -195,8 +231,6 @@ fun HomeScreen() {
                             RoundedCornerShape(10.dp)
                         )
                 ) {
-
-                    // Progress
 
                     Box(
                         modifier = Modifier
@@ -247,7 +281,7 @@ fun HomeScreen() {
         )
 
         // =====================================================
-        // ROW 1
+        // CGPA + DSA
         // =====================================================
 
         Row(
@@ -256,10 +290,14 @@ fun HomeScreen() {
         ) {
 
             FeatureCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable {
+                        onCgpaClick()
+                    },
                 title = "CGPA",
                 value = "8.7",
-                subtitle = "Academic",
+                subtitle = "Tap to view",
                 accent = Color(0xFFB76CFF)
             )
 
@@ -277,7 +315,7 @@ fun HomeScreen() {
         )
 
         // =====================================================
-        // ROW 2
+        // PROJECTS + INTERNSHIPS
         // =====================================================
 
         Row(
@@ -307,7 +345,7 @@ fun HomeScreen() {
         )
 
         // =====================================================
-        // ROW 3
+        // PLACEMENT + GROWTH
         // =====================================================
 
         Row(
@@ -410,6 +448,410 @@ fun HomeScreen() {
                     text = "You're close to your next milestone.",
                     color = Color(0xFF777780),
                     fontSize = 11.sp
+                )
+            }
+        }
+
+        Spacer(
+            modifier = Modifier.height(25.dp)
+        )
+    }
+}
+
+
+// =========================================================
+// CGPA SCREEN
+// =========================================================
+
+@Composable
+private fun CGPAScreen(
+    onBack: () -> Unit
+) {
+
+    var currentCgpa by remember {
+        mutableStateOf("8.7")
+    }
+
+    var targetCgpa by remember {
+        mutableStateOf("9.0")
+    }
+
+    var editMode by remember {
+        mutableStateOf(false)
+    }
+
+    var validationError by remember {
+        mutableStateOf("")
+    }
+
+    val current = currentCgpa.toFloatOrNull()
+    val target = targetCgpa.toFloatOrNull()
+
+    val validCurrent =
+        current != null && current in 4f..10f
+
+    val validTarget =
+        target != null && target in 4f..10f
+
+    val progress = if (
+        validCurrent &&
+        validTarget &&
+        target!! > 0f
+    ) {
+        (current!! / target).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF050507))
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+
+        // =====================================================
+        // TOP BAR
+        // =====================================================
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Text(
+                text = "‹",
+                color = Color.White,
+                fontSize = 38.sp,
+                modifier = Modifier.clickable {
+                    onBack()
+                }
+            )
+
+            Spacer(
+                modifier = Modifier.size(10.dp)
+            )
+
+            Column {
+
+                Text(
+                    text = "CGPA",
+                    color = Color.White,
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Text(
+                    text = "ACADEMIC PERFORMANCE",
+                    color = Color(0xFFB76CFF),
+                    fontSize = 8.sp,
+                    letterSpacing = 1.8.sp
+                )
+            }
+        }
+
+        Spacer(
+            modifier = Modifier.height(30.dp)
+        )
+
+        // =====================================================
+        // CURRENT CGPA
+        // =====================================================
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(26.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF111116)
+            )
+        ) {
+
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+
+                Text(
+                    text = "CURRENT CGPA",
+                    color = Color(0xFF888891),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                Text(
+                    text = currentCgpa,
+                    color = Color.White,
+                    fontSize = 58.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Text(
+                    text = "VALID RANGE: 4.0 – 10.0",
+                    color = Color(0xFF777780),
+                    fontSize = 9.sp,
+                    letterSpacing = 1.2.sp
+                )
+
+                Spacer(
+                    modifier = Modifier.height(22.dp)
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .background(
+                            Color(0xFF292930),
+                            RoundedCornerShape(10.dp)
+                        )
+                ) {
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress)
+                            .height(8.dp)
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color(0xFFB76CFF),
+                                        Color(0xFF00D9FF)
+                                    )
+                                ),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                    )
+                }
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+                Text(
+                    text = when {
+                        !validCurrent -> "Enter a valid CGPA"
+                        !validTarget -> "Set a valid target"
+                        current!! >= target!! -> "Target achieved 🎯"
+                        else -> "${"%.1f".format(target - current)} points to target"
+                    },
+                    color = Color(0xFF9999A3),
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        Spacer(
+            modifier = Modifier.height(24.dp)
+        )
+
+        // =====================================================
+        // TARGET
+        // =====================================================
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF111116)
+            )
+        ) {
+
+            Column(
+                modifier = Modifier.padding(20.dp)
+            ) {
+
+                Text(
+                    text = "YOUR TARGET",
+                    color = Color(0xFF888891),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+
+                Spacer(
+                    modifier = Modifier.height(7.dp)
+                )
+
+                Text(
+                    text = targetCgpa,
+                    color = Color(0xFF00D9FF),
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(
+            modifier = Modifier.height(20.dp)
+        )
+
+        // =====================================================
+        // EDIT SECTION
+        // =====================================================
+
+        if (editMode) {
+
+            OutlinedTextField(
+                value = currentCgpa,
+                onValueChange = {
+                    currentCgpa = it
+                    validationError = ""
+                },
+                label = {
+                    Text("Current CGPA")
+                },
+                supportingText = {
+                    Text("Allowed range: 4.0 – 10.0")
+                },
+                isError = currentCgpa.isNotEmpty() && !validCurrent,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            OutlinedTextField(
+                value = targetCgpa,
+                onValueChange = {
+                    targetCgpa = it
+                    validationError = ""
+                },
+                label = {
+                    Text("Target CGPA")
+                },
+                supportingText = {
+                    Text("Allowed range: 4.0 – 10.0")
+                },
+                isError = targetCgpa.isNotEmpty() && !validTarget,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            if (validationError.isNotEmpty()) {
+
+                Text(
+                    text = validationError,
+                    color = Color(0xFFFF6B6B),
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(
+                        start = 4.dp
+                    )
+                )
+
+                Spacer(
+                    modifier = Modifier.height(10.dp)
+                )
+            }
+
+            Button(
+                onClick = {
+
+                    if (!validCurrent || !validTarget) {
+
+                        validationError =
+                            "CGPA must be between 4.0 and 10.0."
+
+                    } else {
+
+                        validationError = ""
+                        editMode = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF8B4DFF)
+                ),
+                shape = RoundedCornerShape(15.dp)
+            ) {
+
+                Text(
+                    text = "SAVE CHANGES",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+        } else {
+
+            Button(
+                onClick = {
+                    editMode = true
+                    validationError = ""
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF15151B)
+                ),
+                shape = RoundedCornerShape(15.dp)
+            ) {
+
+                Text(
+                    text = "EDIT CGPA",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(
+            modifier = Modifier.height(30.dp)
+        )
+
+        // =====================================================
+        // PRISM INSIGHT
+        // =====================================================
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF111116)
+            )
+        ) {
+
+            Column(
+                modifier = Modifier.padding(20.dp)
+            ) {
+
+                Text(
+                    text = "✦  PRISM INSIGHT",
+                    color = Color(0xFFB76CFF),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp
+                )
+
+                Spacer(
+                    modifier = Modifier.height(10.dp)
+                )
+
+                Text(
+                    text = when {
+                        !validCurrent ->
+                            "Enter a valid CGPA between 4.0 and 10.0."
+
+                        current!! >= 9f ->
+                            "Excellent academic performance. Keep maintaining your consistency."
+
+                        current >= 8f ->
+                            "You're building a strong academic foundation. Keep pushing toward your target."
+
+                        else ->
+                            "Focus on consistency and steady improvement toward your target."
+                    },
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp
                 )
             }
         }
