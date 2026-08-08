@@ -187,6 +187,10 @@ fun HomeScreen() {
         mutableStateOf(false)
     }
 
+    var showGrowthScreen by remember {
+        mutableStateOf(false)
+    }
+
     val placementSkills = remember { mutableStateListOf<PlacementSkill>() }
     val placementAchievements = remember { mutableStateListOf<PlacementAchievement>() }
     val placementCertifications = remember { mutableStateListOf<PlacementCertification>() }
@@ -279,6 +283,20 @@ fun HomeScreen() {
                     returnToAcademics = false
                 }
             }
+        )
+
+    } else if (showGrowthScreen) {
+
+        GrowthScreen(
+            currentCgpa = 8.7f,
+            dsaProblems = dsaProblems,
+            projects = projects,
+            internships = internships,
+            skills = placementSkills,
+            achievements = placementAchievements,
+            certifications = placementCertifications,
+            learning = placementLearning,
+            onBack = { showGrowthScreen = false }
         )
 
     } else if (showPlacementScreen) {
@@ -377,8 +395,12 @@ fun HomeScreen() {
             onPlacementClick = {
                 showPlacementScreen = true
             },
+            onGrowthClick = {
+                showGrowthScreen = true
+            },
             projectCount = projects.size,
-            internshipCount = internships.size
+            internshipCount = internships.size,
+            skillCount = placementSkills.size
         )
     }
 }
@@ -393,11 +415,13 @@ private fun DashboardScreen(
     dsaProblems: List<DSAProblem>,
     projectCount: Int,
     internshipCount: Int,
+    skillCount: Int,
     onCgpaClick: () -> Unit,
     onDsaClick: () -> Unit,
     onProjectsClick: () -> Unit,
     onInternshipsClick: () -> Unit,
-    onPlacementClick: () -> Unit
+    onPlacementClick: () -> Unit,
+    onGrowthClick: () -> Unit
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -680,11 +704,21 @@ private fun DashboardScreen(
                 accent = Color(0xFFFF7B72)
             )
 
+            val dashboardGrowth = calculateGrowthScore(
+                currentCgpa = 8.7f,
+                dsaProblems = dsaProblems,
+                projectCount = projectCount,
+                internshipCount = internshipCount,
+                skillCount = skillCount
+            )
+
             FeatureCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onGrowthClick() },
                 title = "GROWTH",
-                value = "81%",
-                subtitle = "Development",
+                value = "${dashboardGrowth}%",
+                subtitle = "Tap to explore",
                 accent = Color(0xFFFF4FD8)
             )
         }
@@ -747,6 +781,418 @@ private fun DashboardScreen(
 }
 
 
+
+// =========================================================
+// GROWTH SCREEN
+// =========================================================
+
+@Composable
+private fun GrowthScreen(
+    currentCgpa: Float,
+    dsaProblems: List<DSAProblem>,
+    projects: List<ProjectItem>,
+    internships: List<InternshipItem>,
+    skills: List<PlacementSkill>,
+    achievements: List<PlacementAchievement>,
+    certifications: List<PlacementCertification>,
+    learning: List<PlacementLearning>,
+    onBack: () -> Unit
+) {
+
+    val dsaScore = calculateDsaProgress(dsaProblems)
+    val projectScore = calculateProjectGrowthScore(projects)
+    val internshipScore = calculateInternshipGrowthScore(internships)
+    val skillScore = calculateGrowthSkillScore(skills, learning)
+    val academicScore = (currentCgpa / 10f * 100f).coerceIn(0f, 100f)
+    val achievementScore = calculateAchievementScore(
+        achievements,
+        certifications,
+        learning
+    )
+
+    val overall = calculateGrowthScore(
+        currentCgpa = currentCgpa,
+        dsaProblems = dsaProblems,
+        projectCount = projects.size,
+        internshipCount = internships.size,
+        skillCount = skills.size
+    )
+
+    val strongest = listOf(
+        "Academics" to academicScore,
+        "DSA" to dsaScore,
+        "Projects" to projectScore,
+        "Internships" to internshipScore,
+        "Skills" to skillScore,
+        "Achievements" to achievementScore.toFloat()
+    ).maxByOrNull { it.second }
+
+    val weakest = listOf(
+        "Academics" to academicScore,
+        "DSA" to dsaScore,
+        "Projects" to projectScore,
+        "Internships" to internshipScore,
+        "Skills" to skillScore,
+        "Achievements" to achievementScore.toFloat()
+    ).minByOrNull { it.second }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF050507))
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "‹",
+                color = Color.White,
+                fontSize = 38.sp,
+                modifier = Modifier.clickable { onBack() }
+            )
+            Spacer(modifier = Modifier.size(10.dp))
+            Column {
+                Text(
+                    text = "GROWTH",
+                    color = Color.White,
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "YOUR DEVELOPMENT OVERVIEW",
+                    color = Color(0xFFFF4FD8),
+                    fontSize = 8.sp,
+                    letterSpacing = 1.6.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(25.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        ) {
+            Column(modifier = Modifier.padding(22.dp)) {
+                Text(
+                    text = "OVERALL GROWTH",
+                    color = Color(0xFF888891),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Text(
+                        text = "$overall",
+                        color = Color.White,
+                        fontSize = 43.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "/ 100",
+                        color = Color(0xFF686871),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+                ProgressBar(progress = overall / 100f)
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = when {
+                        overall >= 85 -> "Exceptional development profile. Keep pushing your strongest areas."
+                        overall >= 70 -> "Good development profile. Consistency will move you to the next level."
+                        overall >= 50 -> "Your journey is taking shape. Focus on the weakest area first."
+                        else -> "Start building consistent progress across academics, skills and career preparation."
+                    },
+                    color = Color(0xFF777780),
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        SectionTitle(text = "GROWTH GRAPH")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text(
+                    text = "CURRENT DEVELOPMENT INDEX",
+                    color = Color(0xFF777780),
+                    fontSize = 9.sp,
+                    letterSpacing = 1.5.sp
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                GrowthBarGraph(
+                    values = listOf(
+                        academicScore,
+                        dsaScore,
+                        projectScore,
+                        internshipScore,
+                        skillScore,
+                        achievementScore.toFloat()
+                    ),
+                    labels = listOf("ACA", "DSA", "PRO", "INT", "SKL", "ACH")
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Growth is calculated from the data currently available in your PRISM modules.",
+                    color = Color(0xFF66666F),
+                    fontSize = 9.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        SectionTitle(text = "AREA PERFORMANCE")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        GrowthMetricCard("ACADEMICS", academicScore, Color(0xFFB76CFF))
+        GrowthMetricCard("DSA", dsaScore, Color(0xFF00D9FF))
+        GrowthMetricCard("PROJECTS", projectScore, Color(0xFF65E572))
+        GrowthMetricCard("INTERNSHIPS", internshipScore, Color(0xFFFFD23F))
+        GrowthMetricCard("SKILLS", skillScore, Color(0xFFFF7B72))
+        GrowthMetricCard("ACHIEVEMENTS", achievementScore.toFloat(), Color(0xFFFF4FD8))
+
+        Spacer(modifier = Modifier.height(24.dp))
+        SectionTitle(text = "MILESTONES")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (dsaProblems.size >= 10) {
+            MilestoneCard("100-STYLE DSA MILESTONE", "Your DSA problem count has crossed 10.", true)
+        }
+        if (projects.any { it.status == "Completed" }) {
+            MilestoneCard("PROJECT COMPLETED", "You have completed at least one project.", true)
+        }
+        if (internships.any { it.status == "Selected" }) {
+            MilestoneCard("INTERNSHIP SELECTED", "You have recorded a successful internship outcome.", true)
+        }
+        if (currentCgpa >= 8.5f) {
+            MilestoneCard("CGPA 8.5+", "Your current CGPA has crossed 8.5.", true)
+        }
+        if (skills.size >= 5) {
+            MilestoneCard("SKILL FOUNDATION", "You have added at least five placement skills.", true)
+        }
+        if (
+            dsaProblems.size < 10 &&
+            projects.none { it.status == "Completed" } &&
+            internships.none { it.status == "Selected" } &&
+            currentCgpa < 8.5f &&
+            skills.size < 5
+        ) {
+            MilestoneCard("YOUR FIRST MILESTONE", "Keep building your PRISM profile. Milestones will appear automatically.", false)
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        SectionTitle(text = "GROWTH SIGNALS")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text(
+                    text = "✦  PRISM GROWTH INSIGHT",
+                    color = Color(0xFFFF4FD8),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Strongest area: ${strongest?.first ?: "Not enough data"}",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(5.dp))
+                Text(
+                    text = "Priority area: ${weakest?.first ?: "Not enough data"}",
+                    color = Color(0xFFFF7B72),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = growthRecommendation(weakest?.first),
+                    color = Color(0xFF777780),
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(30.dp))
+    }
+}
+
+@Composable
+private fun GrowthBarGraph(values: List<Float>, labels: List<String>) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        values.forEachIndexed { index, value ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = "${value.roundToInt()}",
+                    color = Color.White,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(5.dp))
+                Box(
+                    modifier = Modifier
+                        .width(25.dp)
+                        .height((110f * (value / 100f).coerceIn(0f, 1f)).dp)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                listOf(Color(0xFFFF4FD8), Color(0xFFB76CFF))
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                )
+                Spacer(modifier = Modifier.height(7.dp))
+                Text(
+                    text = labels[index],
+                    color = Color(0xFF777780),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GrowthMetricCard(title: String, value: Float, accent: Color) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(17.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+    ) {
+        Column(modifier = Modifier.padding(15.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(title, color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Text("${value.roundToInt()}%", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            ProgressBar(progress = value / 100f)
+        }
+    }
+}
+
+@Composable
+private fun MilestoneCard(title: String, description: String, achieved: Boolean) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (achieved) "✓" else "○",
+                color = if (achieved) Color(0xFF65E572) else Color(0xFF777780),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(title, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(description, color = Color(0xFF777780), fontSize = 9.sp)
+            }
+        }
+    }
+}
+
+private fun calculateProjectGrowthScore(projects: List<ProjectItem>): Float {
+    if (projects.isEmpty()) return 0f
+    val averageProgress = projects.map { it.progress }.average().toFloat()
+    val completedBonus = projects.count { it.status == "Completed" }.coerceAtMost(3) * 5f
+    return (averageProgress + completedBonus).coerceIn(0f, 100f)
+}
+
+private fun calculateInternshipGrowthScore(internships: List<InternshipItem>): Float {
+    if (internships.isEmpty()) return 0f
+    val applicationActivity = (internships.size.coerceAtMost(10) / 10f) * 45f
+    val interviewActivity = (internships.count { it.status == "Interview" || it.status == "Selected" }.coerceAtMost(5) / 5f) * 30f
+    val selectedBonus = (internships.count { it.status == "Selected" }.coerceAtMost(2) / 2f) * 25f
+    return (applicationActivity + interviewActivity + selectedBonus).coerceIn(0f, 100f)
+}
+
+private fun calculateGrowthSkillScore(
+    skills: List<PlacementSkill>,
+    learning: List<PlacementLearning>
+): Float {
+    val skillPart = if (skills.isEmpty()) 0f else (skills.map { it.rating }.average().toFloat() / 10f) * 70f
+    val learningPart = if (learning.isEmpty()) 0f else (learning.map { it.level }.average().toFloat() / 10f) * 30f
+    return (skillPart + learningPart).coerceIn(0f, 100f)
+}
+
+private fun calculateGrowthScore(
+    currentCgpa: Float,
+    dsaProblems: List<DSAProblem>,
+    projectCount: Int,
+    internshipCount: Int,
+    skillCount: Int
+): Int {
+    val academic = (currentCgpa / 10f * 100f).coerceIn(0f, 100f)
+    val dsa = calculateDsaProgress(dsaProblems)
+    val projects = (projectCount / 6f * 100f).coerceIn(0f, 100f)
+    val internships = (internshipCount / 5f * 100f).coerceIn(0f, 100f)
+    val skills = (skillCount / 10f * 100f).coerceIn(0f, 100f)
+    return (
+            academic * .25f +
+                    dsa * .25f +
+                    projects * .15f +
+                    internships * .15f +
+                    skills * .20f
+            ).roundToInt().coerceIn(0, 100)
+}
+
+private fun growthRecommendation(area: String?): String = when (area) {
+    "Academics" -> "Keep your CGPA moving upward and maintain consistency across semesters."
+    "DSA" -> "Increase problem-solving consistency and strengthen medium and hard topics."
+    "Projects" -> "Complete more projects and increase their depth, documentation and deployment."
+    "Internships" -> "Increase relevant applications and build interview exposure."
+    "Skills" -> "Add relevant skills and keep improving both technical and soft-skill proficiency."
+    "Achievements" -> "Build evidence through competitions, certifications and meaningful accomplishments."
+    else -> "Keep adding meaningful progress to your PRISM profile."
+}
 
 // =========================================================
 // ACADEMICS SCREEN
