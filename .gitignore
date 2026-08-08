@@ -1,6 +1,19 @@
+# Android Studio / IntelliJ
 .idea/
-.gradle/
-local.properties
-build/
 *.iml
+
+# Gradle
+.gradle/
+build/
+
+# Local configuration
+local.properties
+
+# macOS
 .DS_Store
+
+# Android build output
+*/build/
+
+# Kotlin / Java generated files
+*.class
