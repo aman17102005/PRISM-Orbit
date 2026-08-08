@@ -58,13 +58,15 @@ data class DSAProblem(
 )
 
 data class AcademicEvent(
+    val id: Long = System.currentTimeMillis(),
     val title: String,
     val subject: String,
     val type: String,
     val date: String,
     val day: String,
     val syllabus: String,
-    val notes: String
+    val notes: String,
+    val status: String = "UPCOMING"
 )
 
 
@@ -150,6 +152,21 @@ fun HomeScreen() {
             },
             onAddEvent = { event ->
                 academicEvents.add(event)
+            },
+            onUpdateEvent = { updated ->
+                val index = academicEvents.indexOfFirst { it.id == updated.id }
+                if (index >= 0) academicEvents[index] = updated
+            },
+            onDeleteEvent = { id ->
+                academicEvents.removeAll { it.id == id }
+            },
+            onCompleteEvent = { id ->
+                val index = academicEvents.indexOfFirst { it.id == id }
+                if (index >= 0) academicEvents[index] = academicEvents[index].copy(status = "COMPLETED")
+            },
+            onCancelEvent = { id ->
+                val index = academicEvents.indexOfFirst { it.id == id }
+                if (index >= 0) academicEvents[index] = academicEvents[index].copy(status = "CANCELLED")
             }
         )
 
@@ -555,10 +572,15 @@ private fun AcademicsScreen(
     events: List<AcademicEvent>,
     onBack: () -> Unit,
     onCgpaClick: () -> Unit,
-    onAddEvent: (AcademicEvent) -> Unit
+    onAddEvent: (AcademicEvent) -> Unit,
+    onUpdateEvent: (AcademicEvent) -> Unit,
+    onDeleteEvent: (Long) -> Unit,
+    onCompleteEvent: (Long) -> Unit,
+    onCancelEvent: (Long) -> Unit
 ) {
 
     var showAddEvent by remember { mutableStateOf(false) }
+    var editingEvent by remember { mutableStateOf<AcademicEvent?>(null) }
 
     Column(
         modifier = Modifier
@@ -697,12 +719,21 @@ private fun AcademicsScreen(
         Spacer(modifier = Modifier.height(22.dp))
 
         if (events.isNotEmpty()) {
-            SectionTitle(text = "UPCOMING EVENTS")
+            SectionTitle(text = "ACADEMIC EVENTS")
             Spacer(modifier = Modifier.height(12.dp))
-            events.sortedBy { it.date }.take(10).forEach { event ->
-                AcademicEventRow(event)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+            events
+                .sortedWith(compareBy<AcademicEvent> { eventStatus(it) == "EXPIRED" || eventStatus(it) == "CANCELLED" }.thenBy { it.date })
+                .take(20)
+                .forEach { event ->
+                    AcademicEventRow(
+                        event = event,
+                        onEdit = { editingEvent = it },
+                        onDelete = { onDeleteEvent(it) },
+                        onComplete = { onCompleteEvent(it) },
+                        onCancel = { onCancelEvent(it) }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
         } else {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -726,10 +757,22 @@ private fun AcademicsScreen(
 
     if (showAddEvent) {
         AddAcademicEventScreen(
+            initialEvent = null,
             onBack = { showAddEvent = false },
             onSave = {
                 onAddEvent(it)
                 showAddEvent = false
+            }
+        )
+    }
+
+    editingEvent?.let { event ->
+        AddAcademicEventScreen(
+            initialEvent = event,
+            onBack = { editingEvent = null },
+            onSave = {
+                onUpdateEvent(it)
+                editingEvent = null
             }
         )
     }
@@ -912,7 +955,22 @@ private fun AcademicCalendar(
 }
 
 @Composable
-private fun AcademicEventRow(event: AcademicEvent) {
+private fun AcademicEventRow(
+    event: AcademicEvent,
+    onEdit: (AcademicEvent) -> Unit,
+    onDelete: (Long) -> Unit,
+    onComplete: (Long) -> Unit,
+    onCancel: (Long) -> Unit
+) {
+    val status = eventStatus(event)
+    val statusColor = when (status) {
+        "COMPLETED" -> Color(0xFF65E572)
+        "CANCELLED" -> Color(0xFFFF7B72)
+        "EXPIRED" -> Color(0xFFFF7B72)
+        "TODAY" -> Color(0xFFFFD23F)
+        else -> Color(0xFF00D9FF)
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(17.dp),
@@ -921,20 +979,101 @@ private fun AcademicEventRow(event: AcademicEvent) {
         Column(modifier = Modifier.padding(15.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(event.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text(event.type.uppercase(), color = Color(0xFFB76CFF), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    event.title,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    status,
+                    color = statusColor,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
+
             Spacer(modifier = Modifier.height(5.dp))
-            Text("${event.subject}  •  ${event.date}  •  ${event.day}", color = Color(0xFF00D9FF), fontSize = 9.sp)
+            Text(
+                "${event.subject}  •  ${event.date}  •  ${event.day}",
+                color = Color(0xFF00D9FF),
+                fontSize = 9.sp
+            )
+            Text(
+                event.type.uppercase(),
+                color = Color(0xFFB76CFF),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold
+            )
+
             if (event.syllabus.isNotBlank()) {
                 Spacer(modifier = Modifier.height(5.dp))
-                Text("Syllabus: ${event.syllabus}", color = Color(0xFF888891), fontSize = 9.sp)
+                Text(
+                    "Syllabus: ${event.syllabus}",
+                    color = Color(0xFF888891),
+                    fontSize = 9.sp
+                )
             }
             if (event.notes.isNotBlank()) {
                 Spacer(modifier = Modifier.height(3.dp))
-                Text(event.notes, color = Color(0xFF777780), fontSize = 9.sp)
+                Text(
+                    event.notes,
+                    color = Color(0xFF777780),
+                    fontSize = 9.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { onEdit(event) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("EDIT", fontSize = 9.sp)
+                }
+
+                OutlinedButton(
+                    onClick = { onDelete(event.id) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("DELETE", fontSize = 9.sp)
+                }
+            }
+
+            if (status != "COMPLETED" && status != "CANCELLED" && status != "EXPIRED") {
+                Spacer(modifier = Modifier.height(7.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Button(
+                        onClick = { onComplete(event.id) },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF17351F)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("✓ COMPLETE", fontSize = 9.sp, color = Color(0xFF65E572))
+                    }
+
+                    OutlinedButton(
+                        onClick = { onCancel(event.id) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("CANCEL", fontSize = 9.sp)
+                    }
+                }
             }
         }
     }
@@ -942,18 +1081,22 @@ private fun AcademicEventRow(event: AcademicEvent) {
 
 @Composable
 private fun AddAcademicEventScreen(
+    initialEvent: AcademicEvent?,
     onBack: () -> Unit,
     onSave: (AcademicEvent) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var subject by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("Assignment") }
-    var date by remember { mutableStateOf("") }
-    var syllabus by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
+    var title by remember { mutableStateOf(initialEvent?.title ?: "") }
+    var subject by remember { mutableStateOf(initialEvent?.subject ?: "") }
+    var type by remember { mutableStateOf(initialEvent?.type ?: "Assignment") }
+    var date by remember { mutableStateOf(initialEvent?.date ?: "") }
+    var syllabus by remember { mutableStateOf(initialEvent?.syllabus ?: "") }
+    var notes by remember { mutableStateOf(initialEvent?.notes ?: "") }
     var error by remember { mutableStateOf("") }
 
-    val types = listOf("Assignment", "Class Test", "Viva", "Practical", "Quiz", "MST", "Exam", "Project", "Other")
+    val types = listOf(
+        "Assignment", "Class Test", "Viva", "Practical", "Quiz",
+        "MST", "Exam", "Project", "Other"
+    )
 
     Box(
         modifier = Modifier
@@ -967,13 +1110,29 @@ private fun AddAcademicEventScreen(
                 .padding(20.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+                Text(
+                    "‹",
+                    color = Color.White,
+                    fontSize = 38.sp,
+                    modifier = Modifier.clickable { onBack() }
+                )
                 Spacer(modifier = Modifier.size(10.dp))
                 Column {
-                    Text("ADD EVENT", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-                    Text("ACADEMIC PLANNER", color = Color(0xFF00D9FF), fontSize = 8.sp, letterSpacing = 1.5.sp)
+                    Text(
+                        if (initialEvent == null) "ADD EVENT" else "EDIT EVENT",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "ACADEMIC PLANNER",
+                        color = Color(0xFF00D9FF),
+                        fontSize = 8.sp,
+                        letterSpacing = 1.5.sp
+                    )
                 }
             }
+
             Spacer(modifier = Modifier.height(25.dp))
 
             OutlinedTextField(
@@ -984,7 +1143,9 @@ private fun AddAcademicEventScreen(
                 placeholder = { Text("e.g. Hall Effect Viva") },
                 singleLine = true
             )
+
             Spacer(modifier = Modifier.height(12.dp))
+
             OutlinedTextField(
                 value = subject,
                 onValueChange = { subject = it; error = "" },
@@ -993,25 +1154,46 @@ private fun AddAcademicEventScreen(
                 placeholder = { Text("e.g. Engineering Physics") },
                 singleLine = true
             )
+
             Spacer(modifier = Modifier.height(16.dp))
-            Text("EVENT TYPE", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            Text(
+                "EVENT TYPE",
+                color = Color(0xFF888891),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp
+            )
             Spacer(modifier = Modifier.height(8.dp))
+
             types.forEach { item ->
-                ChoiceButton(text = item, selected = type == item, onClick = { type = item })
+                ChoiceButton(
+                    text = item,
+                    selected = type == item,
+                    onClick = { type = item }
+                )
                 Spacer(modifier = Modifier.height(6.dp))
             }
+
             Spacer(modifier = Modifier.height(10.dp))
+
             OutlinedTextField(
                 value = date,
-                onValueChange = { date = it.filter { c -> c.isDigit() || c == '-' }; error = "" },
+                onValueChange = {
+                    date = it.filter { c -> c.isDigit() || c == '-' }
+                    error = ""
+                },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Date") },
                 placeholder = { Text("YYYY-MM-DD") },
-                supportingText = { Text("Enter date as YYYY-MM-DD. Day is calculated automatically.") },
+                supportingText = {
+                    Text("Day is calculated automatically.")
+                },
                 singleLine = true,
                 isError = error.isNotEmpty()
             )
+
             Spacer(modifier = Modifier.height(12.dp))
+
             OutlinedTextField(
                 value = syllabus,
                 onValueChange = { syllabus = it },
@@ -1020,7 +1202,9 @@ private fun AddAcademicEventScreen(
                 placeholder = { Text("Topics / units to prepare") },
                 minLines = 2
             )
+
             Spacer(modifier = Modifier.height(12.dp))
+
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
@@ -1029,11 +1213,14 @@ private fun AddAcademicEventScreen(
                 placeholder = { Text("Any extra preparation details") },
                 minLines = 2
             )
+
             if (error.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(error, color = Color(0xFFFF6B6B), fontSize = 11.sp)
             }
+
             Spacer(modifier = Modifier.height(18.dp))
+
             Button(
                 onClick = {
                     val parsed = parseAcademicDate(date)
@@ -1041,27 +1228,61 @@ private fun AddAcademicEventScreen(
                         title.trim().isEmpty() -> error = "Please enter an event title."
                         subject.trim().isEmpty() -> error = "Please enter the subject."
                         parsed == null -> error = "Use a valid date in YYYY-MM-DD format."
-                        else -> onSave(
-                            AcademicEvent(
-                                title = title.trim(),
-                                subject = subject.trim(),
-                                type = type,
-                                date = date,
-                                day = parsed.first,
-                                syllabus = syllabus.trim(),
-                                notes = notes.trim()
+                        else -> {
+                            onSave(
+                                AcademicEvent(
+                                    id = initialEvent?.id ?: System.currentTimeMillis(),
+                                    title = title.trim(),
+                                    subject = subject.trim(),
+                                    type = type,
+                                    date = date,
+                                    day = parsed.first,
+                                    syllabus = syllabus.trim(),
+                                    notes = notes.trim(),
+                                    status = when (initialEvent?.status) {
+                                        "COMPLETED" -> "COMPLETED"
+                                        "CANCELLED" -> "CANCELLED"
+                                        else -> "UPCOMING"
+                                    }
+                                )
                             )
-                        )
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
                 shape = RoundedCornerShape(15.dp)
             ) {
-                Text("SAVE EVENT", fontWeight = FontWeight.Bold)
+                Text(
+                    if (initialEvent == null) "SAVE EVENT" else "SAVE CHANGES",
+                    fontWeight = FontWeight.Bold
+                )
             }
+
             Spacer(modifier = Modifier.height(30.dp))
         }
+    }
+}
+
+private fun todayDateKey(): String {
+    val calendar = Calendar.getInstance()
+    return "%04d-%02d-%02d".format(
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH) + 1,
+        calendar.get(Calendar.DAY_OF_MONTH)
+    )
+}
+
+private fun eventStatus(event: AcademicEvent): String {
+    if (event.status == "COMPLETED" || event.status == "CANCELLED") {
+        return event.status
+    }
+
+    val today = todayDateKey()
+    return when {
+        event.date < today -> "EXPIRED"
+        event.date == today -> "TODAY"
+        else -> "UPCOMING"
     }
 }
 
