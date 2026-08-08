@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -23,6 +24,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.Divider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -40,6 +42,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Calendar
 import kotlin.math.roundToInt
 
 
@@ -54,6 +57,16 @@ data class DSAProblem(
     val score: Float
 )
 
+data class AcademicEvent(
+    val title: String,
+    val subject: String,
+    val type: String,
+    val date: String,
+    val day: String,
+    val syllabus: String,
+    val notes: String
+)
+
 
 // =========================================================
 // HOME SCREEN
@@ -66,8 +79,20 @@ fun HomeScreen() {
         mutableStateOf(false)
     }
 
+    var showAcademicsScreen by remember {
+        mutableStateOf(false)
+    }
+
+    var returnToAcademics by remember {
+        mutableStateOf(false)
+    }
+
     var showDsaScreen by remember {
         mutableStateOf(false)
+    }
+
+    val academicEvents = remember {
+        mutableStateListOf<AcademicEvent>()
     }
 
     /*
@@ -110,11 +135,33 @@ fun HomeScreen() {
         )
     }
 
-    if (showCgpaScreen) {
+    if (showAcademicsScreen) {
+
+        AcademicsScreen(
+            currentCgpa = 8.7f,
+            events = academicEvents,
+            onBack = {
+                showAcademicsScreen = false
+            },
+            onCgpaClick = {
+                showAcademicsScreen = false
+                showCgpaScreen = true
+                returnToAcademics = true
+            },
+            onAddEvent = { event ->
+                academicEvents.add(event)
+            }
+        )
+
+    } else if (showCgpaScreen) {
 
         CGPAScreen(
             onBack = {
                 showCgpaScreen = false
+                if (returnToAcademics) {
+                    showAcademicsScreen = true
+                    returnToAcademics = false
+                }
             }
         )
 
@@ -135,7 +182,7 @@ fun HomeScreen() {
         DashboardScreen(
             dsaProblems = dsaProblems,
             onCgpaClick = {
-                showCgpaScreen = true
+                showAcademicsScreen = true
             },
             onDsaClick = {
                 showDsaScreen = true
@@ -362,7 +409,7 @@ private fun DashboardScreen(
                     },
                 title = "CGPA",
                 value = "8.7",
-                subtitle = "Tap to view",
+                subtitle = "Academics",
                 accent = Color(0xFFB76CFF)
             )
 
@@ -496,6 +543,547 @@ private fun DashboardScreen(
     }
 }
 
+
+
+// =========================================================
+// ACADEMICS SCREEN
+// =========================================================
+
+@Composable
+private fun AcademicsScreen(
+    currentCgpa: Float,
+    events: List<AcademicEvent>,
+    onBack: () -> Unit,
+    onCgpaClick: () -> Unit,
+    onAddEvent: (AcademicEvent) -> Unit
+) {
+
+    var showAddEvent by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF050507))
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "‹",
+                color = Color.White,
+                fontSize = 38.sp,
+                modifier = Modifier.clickable { onBack() }
+            )
+            Spacer(modifier = Modifier.size(10.dp))
+            Column {
+                Text(
+                    text = "ACADEMICS",
+                    color = Color.White,
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "PERFORMANCE + PLANNING",
+                    color = Color(0xFFB76CFF),
+                    fontSize = 8.sp,
+                    letterSpacing = 1.8.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(25.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    text = "ACADEMIC OVERVIEW",
+                    color = Color(0xFF888891),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "${"%.1f".format(currentCgpa)}",
+                            color = Color.White,
+                            fontSize = 42.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "CURRENT CGPA",
+                            color = Color(0xFF777780),
+                            fontSize = 9.sp,
+                            letterSpacing = 1.2.sp
+                        )
+                    }
+                    Text(
+                        text = "TARGET  9.0",
+                        color = Color(0xFF00D9FF),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(15.dp))
+                ProgressBar(progress = (currentCgpa / 10f).coerceIn(0f, 1f))
+                Spacer(modifier = Modifier.height(15.dp))
+                Button(
+                    onClick = onCgpaClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15151B)),
+                    shape = RoundedCornerShape(15.dp)
+                ) {
+                    Text("VIEW / EDIT CGPA", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(22.dp))
+        SectionTitle(text = "SEMESTER TRACKER")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        SemesterRow("SEM 1", "8.4", true)
+        SemesterRow("SEM 2", "8.7", true)
+        SemesterRow("SEM 3", "—", false)
+        SemesterRow("SEM 4", "—", false)
+        SemesterRow("SEM 5", "—", false)
+        SemesterRow("SEM 6", "—", false)
+        SemesterRow("SEM 7", "—", false)
+        SemesterRow("SEM 8", "—", false)
+
+        Spacer(modifier = Modifier.height(22.dp))
+        SectionTitle(text = "SEMESTER GROWTH")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text(
+                    text = "SGPA TREND",
+                    color = Color(0xFF777780),
+                    fontSize = 9.sp,
+                    letterSpacing = 1.5.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                AcademicGrowthGraph()
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        SectionTitle(text = "ACADEMIC PLANNER")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        AcademicCalendar(
+            events = events,
+            onAddEvent = { showAddEvent = true }
+        )
+
+        Spacer(modifier = Modifier.height(22.dp))
+
+        if (events.isNotEmpty()) {
+            SectionTitle(text = "UPCOMING EVENTS")
+            Spacer(modifier = Modifier.height(12.dp))
+            events.sortedBy { it.date }.take(10).forEach { event ->
+                AcademicEventRow(event)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        } else {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text("NO UPCOMING EVENTS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(5.dp))
+                    Text(
+                        "Add your assignments, tests, viva, practicals and exams here.",
+                        color = Color(0xFF777780),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(25.dp))
+    }
+
+    if (showAddEvent) {
+        AddAcademicEventScreen(
+            onBack = { showAddEvent = false },
+            onSave = {
+                onAddEvent(it)
+                showAddEvent = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun SemesterRow(name: String, sgpa: String, completed: Boolean) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        shape = RoundedCornerShape(15.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(
+                text = if (completed) sgpa else "NOT COMPLETED",
+                color = if (completed) Color(0xFF00D9FF) else Color(0xFF66666F),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun AcademicGrowthGraph() {
+    val points = listOf(7.8f, 8.1f, 8.4f, 8.7f)
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(150.dp)
+    ) {
+        val max = 10f
+        val min = 6f
+        val step = size.width / (points.size - 1)
+        for (i in 0..4) {
+            val y = size.height * i / 4f
+            drawLine(
+                color = Color(0xFF202027),
+                start = Offset(0f, y),
+                end = Offset(size.width, y),
+                strokeWidth = 1.dp.toPx()
+            )
+        }
+        val offsets = points.mapIndexed { index, value ->
+            Offset(
+                x = index * step,
+                y = size.height - ((value - min) / (max - min)).coerceIn(0f, 1f) * size.height
+            )
+        }
+        for (i in 0 until offsets.size - 1) {
+            drawLine(
+                brush = Brush.linearGradient(listOf(Color(0xFFB76CFF), Color(0xFF00D9FF))),
+                start = offsets[i],
+                end = offsets[i + 1],
+                strokeWidth = 4.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+        }
+        offsets.forEach {
+            drawCircle(Color(0xFF00D9FF), 5.dp.toPx(), it)
+        }
+    }
+}
+
+@Composable
+private fun AcademicCalendar(
+    events: List<AcademicEvent>,
+    onAddEvent: () -> Unit
+) {
+    val calendar = Calendar.getInstance()
+    val year = calendar.get(Calendar.YEAR)
+    val month = calendar.get(Calendar.MONTH)
+    val today = calendar.get(Calendar.DAY_OF_MONTH)
+    val first = Calendar.getInstance().apply {
+        set(year, month, 1)
+    }
+    val firstDay = (first.get(Calendar.DAY_OF_WEEK) + 5) % 7
+    val daysInMonth = first.getActualMaximum(Calendar.DAY_OF_MONTH)
+    val eventDays = events.mapNotNull { it.date.substringAfterLast('-').toIntOrNull() }.toSet()
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = first.getDisplayName(Calendar.MONTH, Calendar.LONG, java.util.Locale.getDefault()).uppercase(),
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(year.toString(), color = Color(0xFF777780), fontSize = 9.sp)
+                }
+                Text(
+                    text = "${events.size} EVENTS",
+                    color = Color(0xFF00D9FF),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(15.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                listOf("M", "T", "W", "T", "F", "S", "S").forEach {
+                    Text(
+                        text = it,
+                        color = Color(0xFF66666F),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            val totalCells = ((firstDay + daysInMonth + 6) / 7) * 7
+            for (weekStart in 0 until totalCells step 7) {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    for (cell in weekStart until weekStart + 7) {
+                        val day = cell - firstDay + 1
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (day in 1..daysInMonth) {
+                                val isToday = day == today
+                                val hasEvent = day in eventDays
+                                Box(
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .background(
+                                            color = when {
+                                                isToday -> Color(0xFF8B4DFF)
+                                                hasEvent -> Color(0xFF1D1730)
+                                                else -> Color.Transparent
+                                            },
+                                            shape = RoundedCornerShape(10.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = day.toString(),
+                                        color = if (isToday || hasEvent) Color.White else Color(0xFFAAAAAF),
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isToday || hasEvent) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+            Button(
+                onClick = onAddEvent,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
+                shape = RoundedCornerShape(15.dp)
+            ) {
+                Text("+  ADD ACADEMIC EVENT", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AcademicEventRow(event: AcademicEvent) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(17.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+    ) {
+        Column(modifier = Modifier.padding(15.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(event.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(event.type.uppercase(), color = Color(0xFFB76CFF), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(5.dp))
+            Text("${event.subject}  •  ${event.date}  •  ${event.day}", color = Color(0xFF00D9FF), fontSize = 9.sp)
+            if (event.syllabus.isNotBlank()) {
+                Spacer(modifier = Modifier.height(5.dp))
+                Text("Syllabus: ${event.syllabus}", color = Color(0xFF888891), fontSize = 9.sp)
+            }
+            if (event.notes.isNotBlank()) {
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(event.notes, color = Color(0xFF777780), fontSize = 9.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddAcademicEventScreen(
+    onBack: () -> Unit,
+    onSave: (AcademicEvent) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var subject by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf("Assignment") }
+    var date by remember { mutableStateOf("") }
+    var syllabus by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+
+    val types = listOf("Assignment", "Class Test", "Viva", "Practical", "Quiz", "MST", "Exam", "Project", "Other")
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF050507))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+                Spacer(modifier = Modifier.size(10.dp))
+                Column {
+                    Text("ADD EVENT", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text("ACADEMIC PLANNER", color = Color(0xFF00D9FF), fontSize = 8.sp, letterSpacing = 1.5.sp)
+                }
+            }
+            Spacer(modifier = Modifier.height(25.dp))
+
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it; error = "" },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Event Title") },
+                placeholder = { Text("e.g. Hall Effect Viva") },
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = subject,
+                onValueChange = { subject = it; error = "" },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Subject") },
+                placeholder = { Text("e.g. Engineering Physics") },
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("EVENT TYPE", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            types.forEach { item ->
+                ChoiceButton(text = item, selected = type == item, onClick = { type = item })
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(
+                value = date,
+                onValueChange = { date = it.filter { c -> c.isDigit() || c == '-' }; error = "" },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Date") },
+                placeholder = { Text("YYYY-MM-DD") },
+                supportingText = { Text("Enter date as YYYY-MM-DD. Day is calculated automatically.") },
+                singleLine = true,
+                isError = error.isNotEmpty()
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = syllabus,
+                onValueChange = { syllabus = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Syllabus") },
+                placeholder = { Text("Topics / units to prepare") },
+                minLines = 2
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Notes") },
+                placeholder = { Text("Any extra preparation details") },
+                minLines = 2
+            )
+            if (error.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(error, color = Color(0xFFFF6B6B), fontSize = 11.sp)
+            }
+            Spacer(modifier = Modifier.height(18.dp))
+            Button(
+                onClick = {
+                    val parsed = parseAcademicDate(date)
+                    when {
+                        title.trim().isEmpty() -> error = "Please enter an event title."
+                        subject.trim().isEmpty() -> error = "Please enter the subject."
+                        parsed == null -> error = "Use a valid date in YYYY-MM-DD format."
+                        else -> onSave(
+                            AcademicEvent(
+                                title = title.trim(),
+                                subject = subject.trim(),
+                                type = type,
+                                date = date,
+                                day = parsed.first,
+                                syllabus = syllabus.trim(),
+                                notes = notes.trim()
+                            )
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
+                shape = RoundedCornerShape(15.dp)
+            ) {
+                Text("SAVE EVENT", fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(30.dp))
+        }
+    }
+}
+
+private fun parseAcademicDate(value: String): Pair<String, String>? {
+    val parts = value.split("-")
+    if (parts.size != 3) return null
+    val year = parts[0].toIntOrNull() ?: return null
+    val month = parts[1].toIntOrNull() ?: return null
+    val day = parts[2].toIntOrNull() ?: return null
+    if (month !in 1..12 || day !in 1..31 || parts[0].length != 4) return null
+    val calendar = Calendar.getInstance()
+    calendar.clear()
+    calendar.setLenient(false)
+    return try {
+        calendar.set(year, month - 1, day)
+        calendar.time
+        val weekday = calendar.getDisplayName(Calendar.DAY_OF_WEEK, Calendar.LONG, java.util.Locale.getDefault()) ?: return null
+        weekday to value
+    } catch (_: Exception) {
+        null
+    }
+}
 
 // =========================================================
 // DSA SCREEN
