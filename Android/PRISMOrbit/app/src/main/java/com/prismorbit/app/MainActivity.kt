@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.userProfileChangeRequest
 import com.google.firebase.firestore.FirebaseFirestore
 import com.prismorbit.app.ui.theme.PRISMOrbitTheme
 import kotlinx.coroutines.delay
@@ -64,34 +65,41 @@ class MainActivity : ComponentActivity() {
         setContent {
             PRISMOrbitTheme {
 
-                var showOpeningScreen by remember { mutableStateOf(true) }
+                var showOpeningScreen by remember {
+                    mutableStateOf(true)
+                }
 
-                var isAuthenticated by remember {
+                var userIsAuthenticated by remember {
                     mutableStateOf(
                         firebaseAuth.currentUser?.isEmailVerified == true
                     )
                 }
 
                 if (showOpeningScreen) {
+
                     OpeningScreen(
                         onFinished = {
                             showOpeningScreen = false
                         }
                     )
-                } else if (isAuthenticated) {
+
+                } else if (userIsAuthenticated) {
+
                     ProfileRouter(
                         firebaseAuth = firebaseAuth,
                         firestore = firestore,
                         onLogout = {
                             firebaseAuth.signOut()
-                            isAuthenticated = false
+                            userIsAuthenticated = false
                         }
                     )
+
                 } else {
+
                     AuthenticationScreen(
                         firebaseAuth = firebaseAuth,
                         onAuthenticationSuccess = {
-                            isAuthenticated = true
+                            userIsAuthenticated = true
                         }
                     )
                 }
@@ -610,10 +618,15 @@ fun ProfileRouter(
                 }
             )
         }
-
         else -> {
-            HomeScreen()
+            HomeScreen(
+                onLogout = {
+                    firebaseAuth.signOut()
+
+                }
+            )
         }
+
     }
 }
 
