@@ -178,6 +178,49 @@ private fun DashboardScreen(
     onProfileClick: () -> Unit
 ) {
 
+    val auth = FirebaseAuth.getInstance()
+    val firestore = FirebaseFirestore.getInstance()
+    val signedInUser = auth.currentUser
+
+    var dashboardUserName by remember {
+        mutableStateOf(
+            signedInUser?.displayName?.trim()?.takeIf { it.isNotBlank() }
+                ?: signedInUser?.email?.substringBefore("@")?.takeIf { it.isNotBlank() }
+                ?: "User"
+        )
+    }
+
+    LaunchedEffect(signedInUser?.uid) {
+        val uid = signedInUser?.uid
+
+        if (uid != null) {
+            firestore
+                .collection("users")
+                .document(uid)
+                .get()
+                .addOnSuccessListener { document ->
+                    val firestoreName = document.getString("name")?.trim()
+
+                    if (!firestoreName.isNullOrBlank()) {
+                        dashboardUserName = firestoreName
+                    }
+                }
+        }
+    }
+
+    val greetingName = dashboardUserName
+        .trim()
+        .split(Regex("\\s+"))
+        .firstOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?: "User"
+
+    val profileInitial = greetingName
+        .firstOrNull()
+        ?.uppercaseChar()
+        ?.toString()
+        ?: "U"
+
     val dsaScore = calculateDsaProgress(dsaProblems)
 
     Column(
@@ -240,7 +283,7 @@ private fun DashboardScreen(
             ) {
 
                 Text(
-                    text = "A",
+                    text = profileInitial,
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
@@ -257,7 +300,7 @@ private fun DashboardScreen(
         // =====================================================
 
         Text(
-            text = "Welcome back, Aman.",
+            text = "Welcome back, $greetingName.",
             color = Color.White,
             fontSize = 25.sp,
             fontWeight = FontWeight.SemiBold
