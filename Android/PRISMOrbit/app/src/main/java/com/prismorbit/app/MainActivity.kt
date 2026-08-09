@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.prismorbit.app.ui.theme.PRISMOrbitTheme
 import kotlinx.coroutines.delay
 
@@ -52,11 +53,13 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
 
     private lateinit var firebaseAuth: FirebaseAuth
+    private lateinit var firestore: FirebaseFirestore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         firebaseAuth = FirebaseAuth.getInstance()
+        firestore = FirebaseFirestore.getInstance()
 
         setContent {
             PRISMOrbitTheme {
@@ -76,7 +79,14 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 } else if (isAuthenticated) {
-                    HomeScreen()
+                    ProfileRouter(
+                        firebaseAuth = firebaseAuth,
+                        firestore = firestore,
+                        onLogout = {
+                            firebaseAuth.signOut()
+                            isAuthenticated = false
+                        }
+                    )
                 } else {
                     AuthenticationScreen(
                         firebaseAuth = firebaseAuth,
@@ -502,6 +512,403 @@ fun AuthenticationScreen(
             color = Color.Gray,
             style = MaterialTheme.typography.bodySmall
         )
+    }
+}
+
+// ============================================================================
+// PROFILE ROUTER
+// ============================================================================
+
+@Composable
+fun ProfileRouter(
+    firebaseAuth: FirebaseAuth,
+    firestore: FirebaseFirestore,
+    onLogout: () -> Unit
+) {
+
+    val user = firebaseAuth.currentUser
+
+    var profileExists by remember { mutableStateOf<Boolean?>(null) }
+    var errorMessage by remember { mutableStateOf("") }
+
+    if (user == null) {
+        onLogout()
+        return
+    }
+
+    LaunchedEffect(user.uid) {
+
+        firestore
+            .collection("users")
+            .document(user.uid)
+            .get()
+            .addOnSuccessListener { document ->
+                profileExists = document.exists()
+            }
+            .addOnFailureListener { exception ->
+                errorMessage = exception.message
+                    ?: "Unable to load your profile."
+            }
+    }
+
+    when {
+        errorMessage.isNotBlank() -> {
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+
+                    Text(
+                        text = "PROFILE ERROR",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = errorMessage,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            errorMessage = ""
+                            profileExists = null
+                        }
+                    ) {
+                        Text("TRY AGAIN")
+                    }
+                }
+            }
+        }
+
+        profileExists == null -> {
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Loading your PRISM profile...")
+            }
+        }
+
+        profileExists == false -> {
+
+            ProfileSetupScreen(
+                firebaseAuth = firebaseAuth,
+                firestore = firestore,
+                onProfileSaved = {
+                    profileExists = true
+                }
+            )
+        }
+
+        else -> {
+            HomeScreen()
+        }
+    }
+}
+
+// ============================================================================
+// PROFILE SETUP SCREEN
+// ============================================================================
+
+@Composable
+fun ProfileSetupScreen(
+    firebaseAuth: FirebaseAuth,
+    firestore: FirebaseFirestore,
+    onProfileSaved: () -> Unit
+) {
+
+    val user = firebaseAuth.currentUser
+
+    var fullName by remember { mutableStateOf("") }
+    var college by remember { mutableStateOf("") }
+    var course by remember { mutableStateOf("") }
+    var semester by remember { mutableStateOf("") }
+    var cgpa by remember { mutableStateOf("") }
+    var skills by remember { mutableStateOf("") }
+    var about by remember { mutableStateOf("") }
+
+    var isSaving by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("") }
+    var messageIsError by remember { mutableStateOf(false) }
+
+    if (user == null) {
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "PRISM",
+            color = Color.White,
+            fontSize = 42.sp,
+            letterSpacing = 5.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "CREATE YOUR PROFILE",
+            color = Color(0xFFD8C8FF),
+            fontSize = 11.sp,
+            letterSpacing = 2.5.sp
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = "Set up your profile once. Your information will be saved to your PRISM account and available on your other devices.",
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        Spacer(modifier = Modifier.height(22.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF151515)
+            )
+        ) {
+
+            Column(
+                modifier = Modifier.padding(20.dp)
+            ) {
+
+                Text(
+                    text = "PERSONAL INFORMATION",
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedTextField(
+                    value = fullName,
+                    onValueChange = {
+                        fullName = it
+                        message = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Full name") },
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = user.email ?: "",
+                    onValueChange = {},
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Email") },
+                    enabled = false,
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Text(
+                    text = "ACADEMIC INFORMATION",
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedTextField(
+                    value = college,
+                    onValueChange = {
+                        college = it
+                        message = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("College / University") },
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = course,
+                    onValueChange = {
+                        course = it
+                        message = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Course / Branch") },
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = semester,
+                    onValueChange = {
+                        semester = it
+                        message = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Semester") },
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = cgpa,
+                    onValueChange = {
+                        cgpa = it
+                        message = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("CGPA") },
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Text(
+                    text = "SKILLS & ABOUT YOU",
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedTextField(
+                    value = skills,
+                    onValueChange = {
+                        skills = it
+                        message = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Skills") },
+                    placeholder = { Text("C++, Java, Python, DSA...") },
+                    minLines = 2
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = about,
+                    onValueChange = {
+                        about = it
+                        message = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("About you") },
+                    minLines = 4
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = {
+
+                        if (fullName.trim().isBlank()) {
+                            message = "Please enter your full name."
+                            messageIsError = true
+                            return@Button
+                        }
+
+                        if (college.trim().isBlank()) {
+                            message = "Please enter your college / university."
+                            messageIsError = true
+                            return@Button
+                        }
+
+                        if (course.trim().isBlank()) {
+                            message = "Please enter your course / branch."
+                            messageIsError = true
+                            return@Button
+                        }
+
+                        isSaving = true
+                        message = "Saving your PRISM profile..."
+                        messageIsError = false
+
+                        val profile = hashMapOf(
+                            "uid" to user.uid,
+                            "name" to fullName.trim(),
+                            "email" to (user.email ?: ""),
+                            "college" to college.trim(),
+                            "course" to course.trim(),
+                            "semester" to semester.trim(),
+                            "cgpa" to cgpa.trim(),
+                            "skills" to skills.trim(),
+                            "about" to about.trim(),
+                            "profileCompleted" to true
+                        )
+
+                        firestore
+                            .collection("users")
+                            .document(user.uid)
+                            .set(profile)
+                            .addOnSuccessListener {
+                                isSaving = false
+                                message = "Profile saved successfully."
+                                messageIsError = false
+                                onProfileSaved()
+                            }
+                            .addOnFailureListener { exception ->
+                                isSaving = false
+                                message = exception.message
+                                    ?: "Unable to save your profile."
+                                messageIsError = true
+                            }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSaving
+                ) {
+                    Text(
+                        if (isSaving) {
+                            "SAVING..."
+                        } else {
+                            "SAVE & CONTINUE"
+                        }
+                    )
+                }
+
+                if (message.isNotBlank()) {
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = message,
+                        color = if (messageIsError) {
+                            Color(0xFFFF8A80)
+                        } else {
+                            Color(0xFFB9F6CA)
+                        },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Your profile is linked to your PRISM account, not to a single device.",
+            color = Color.Gray,
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
