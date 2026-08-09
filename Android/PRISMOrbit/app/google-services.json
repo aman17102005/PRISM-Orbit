@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1083064996221",
+    "project_id": "prism-orbit",
+    "storage_bucket": "prism-orbit.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1083064996221:android:cc2280f91bdc2d773c7c14",
+        "android_client_info": {
+          "package_name": "com.prismorbit.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCb16wTe_mC1XAmhaYleizq7rBoWskuQKE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
