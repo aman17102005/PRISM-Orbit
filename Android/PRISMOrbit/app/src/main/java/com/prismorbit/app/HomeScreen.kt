@@ -137,10 +137,120 @@ private fun saveAcademicRecord(
 }
 
 // =========================================================
+// DSA - FIRESTORE PERSISTENCE
+// =========================================================
+
+private class DsaDuplicateProblemException :
+    Exception("This problem is already added.")
+
+private fun DSAProblem.toMap(): Map<String, Any> = mapOf(
+    "name" to name,
+    "topic" to topic,
+    "difficulty" to difficulty,
+    "score" to score.toDouble()
+)
+
+private fun dsaProblemDocumentId(problemName: String): String {
+    val normalized = problemName
+        .trim()
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "_")
+        .trim('_')
+
+    return normalized.ifBlank { "problem" }
+}
+
+private fun documentToDsaProblem(
+    document: com.google.firebase.firestore.DocumentSnapshot
+): DSAProblem? {
+    val name = document.getString("name")?.trim().orEmpty()
+    if (name.isBlank()) return null
+
+    val topic = document.getString("topic")?.trim().orEmpty()
+    val difficulty = document.getString("difficulty")?.trim().orEmpty()
+    val score = document.getDouble("score")?.toFloat()
+        ?: document.getLong("score")?.toFloat()
+        ?: calculateProblemScore(difficulty, topic)
+
+    return DSAProblem(
+        name = name,
+        topic = topic.ifBlank { "Other" },
+        difficulty = difficulty.ifBlank { "Easy" },
+        score = score
+    )
+}
+
+private fun loadDsaProblems(
+    firestore: FirebaseFirestore,
+    uid: String,
+    onSuccess: (List<DSAProblem>) -> Unit,
+    onError: (Exception) -> Unit
+) {
+    firestore
+        .collection("users")
+        .document(uid)
+        .collection("dsaProblems")
+        .get()
+        .addOnSuccessListener { snapshot ->
+            val problems = snapshot.documents
+                .mapNotNull { documentToDsaProblem(it) }
+                .sortedBy { it.name.lowercase() }
+
+            onSuccess(problems)
+        }
+        .addOnFailureListener { error ->
+            onError(error)
+        }
+}
+
+private fun saveDsaProblem(
+    firestore: FirebaseFirestore,
+    uid: String,
+    problem: DSAProblem,
+    onSuccess: () -> Unit = {},
+    onError: (Exception) -> Unit = {}
+) {
+    val problemRef = firestore
+        .collection("users")
+        .document(uid)
+        .collection("dsaProblems")
+        .document(dsaProblemDocumentId(problem.name))
+
+    firestore.runTransaction { transaction ->
+        val existing = transaction.get(problemRef)
+
+        if (existing.exists()) {
+            throw DsaDuplicateProblemException()
+        }
+
+        transaction.set(problemRef, problem.toMap())
+    }.addOnSuccessListener {
+        onSuccess()
+    }.addOnFailureListener { error ->
+        onError(error)
+    }
+}
+
+private fun deleteDsaProblem(
+    firestore: FirebaseFirestore,
+    uid: String,
+    problem: DSAProblem,
+    onSuccess: () -> Unit = {},
+    onError: (Exception) -> Unit = {}
+) {
+    firestore
+        .collection("users")
+        .document(uid)
+        .collection("dsaProblems")
+        .document(dsaProblemDocumentId(problem.name))
+        .delete()
+        .addOnSuccessListener { onSuccess() }
+        .addOnFailureListener { onError(it) }
+}
+
+// =========================================================
 // ACADEMIC EVENTS - FIRESTORE PERSISTENCE
 // =========================================================
-// Events are stored under the signed-in user's UID.
-// The UI closes the add/edit screen only after Firestore confirms success.
 
 private fun AcademicEvent.toMap(): Map<String, Any> = mapOf(
     "id" to id,
@@ -265,15 +375,10 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
 
     val academicEvents = remember { mutableStateListOf<AcademicEvent>() }
 
-    val dsaProblems = remember {
-        mutableStateListOf(
-            DSAProblem("Two Sum", "Arrays", "Easy", 1.0f),
-            DSAProblem("Binary Search", "Searching & Sorting", "Easy", 1.2f),
-            DSAProblem("LRU Cache", "Hashing", "Medium", 4.0f),
-            DSAProblem("Number of Islands", "Graphs", "Medium", 2.6f),
-            DSAProblem("Word Ladder", "Graphs", "Hard", 3.9f)
-        )
-    }
+    // DSA is now user-specific Firestore data. No sample/hardcoded problems.
+    val dsaProblems = remember { mutableStateListOf<DSAProblem>() }
+    var dsaLoading by remember { mutableStateOf(false) }
+    var dsaLoadError by remember { mutableStateOf("") }
 
     LaunchedEffect(signedInUser?.uid) {
         val uid = signedInUser?.uid
@@ -306,6 +411,29 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
             onError = { error ->
                 academicLoadError =
                     error.message ?: "Unable to load academic events."
+            }
+        )
+    }
+
+    LaunchedEffect(signedInUser?.uid) {
+        val uid = signedInUser?.uid ?: return@LaunchedEffect
+
+        dsaLoading = true
+        dsaLoadError = ""
+        dsaProblems.clear()
+
+        loadDsaProblems(
+            firestore = firestore,
+            uid = uid,
+            onSuccess = { loadedProblems ->
+                dsaProblems.clear()
+                dsaProblems.addAll(loadedProblems)
+                dsaLoading = false
+                dsaLoadError = ""
+            },
+            onError = { error ->
+                dsaLoading = false
+                dsaLoadError = error.message ?: "Unable to load DSA problems."
             }
         )
     }
@@ -370,13 +498,11 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
                     )
                 )
             },
-            onAddEvent = { event, result ->
+            onAddEvent = { event ->
                 val uid = signedInUser?.uid
 
                 if (uid == null) {
-                    val message = "No signed-in user found."
-                    academicLoadError = message
-                    result(false, message)
+                    academicLoadError = "No signed-in user found."
                 } else {
                     saveAcademicEvent(
                         firestore = firestore,
@@ -386,24 +512,20 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
                             academicEvents.removeAll { it.id == event.id }
                             academicEvents.add(event)
                             academicLoadError = ""
-                            result(true, "")
                         },
                         onError = { error ->
-                            val message =
+                            academicLoadError =
                                 error.message ?: "Unable to save academic event."
-                            academicLoadError = message
-                            result(false, message)
                         }
                     )
                 }
             },
-            onUpdateEvent = { updated, result ->
+
+            onUpdateEvent = { updated ->
                 val uid = signedInUser?.uid
 
                 if (uid == null) {
-                    val message = "No signed-in user found."
-                    academicLoadError = message
-                    result(false, message)
+                    academicLoadError = "No signed-in user found."
                 } else {
                     saveAcademicEvent(
                         firestore = firestore,
@@ -420,17 +542,15 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
                             }
 
                             academicLoadError = ""
-                            result(true, "")
                         },
                         onError = { error ->
-                            val message =
+                            academicLoadError =
                                 error.message ?: "Unable to update academic event."
-                            academicLoadError = message
-                            result(false, message)
                         }
                     )
                 }
             },
+
             onDeleteEvent = { id ->
                 val uid = signedInUser?.uid
 
@@ -527,15 +647,65 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     } else if (showDsaScreen) {
         DSAScreen(
             problems = dsaProblems,
+            isLoading = dsaLoading,
+            errorMessage = dsaLoadError,
             onBack = { showDsaScreen = false },
-            onAddProblem = { problem -> dsaProblems.add(problem) }
+            onAddProblem = { problem, result ->
+                val uid = signedInUser?.uid
+
+                if (uid == null) {
+                    val message = "No signed-in user found."
+                    dsaLoadError = message
+                    result(false, message)
+                } else {
+                    saveDsaProblem(
+                        firestore = firestore,
+                        uid = uid,
+                        problem = problem,
+                        onSuccess = {
+                            dsaProblems.add(problem)
+                            dsaProblems.sortBy { it.name.lowercase() }
+                            dsaLoadError = ""
+                            result(true, "")
+                        },
+                        onError = { error ->
+                            val message = error.message ?: "Unable to save DSA problem."
+                            dsaLoadError = message
+                            result(false, message)
+                        }
+                    )
+                }
+            },
+            onDeleteProblem = { problem ->
+                val uid = signedInUser?.uid
+
+                if (uid == null) {
+                    dsaLoadError = "No signed-in user found."
+                } else {
+                    deleteDsaProblem(
+                        firestore = firestore,
+                        uid = uid,
+                        problem = problem,
+                        onSuccess = {
+                            dsaProblems.removeAll { it.name.equals(problem.name, ignoreCase = true) }
+                            dsaLoadError = ""
+                        },
+                        onError = { error ->
+                            dsaLoadError = error.message ?: "Unable to delete DSA problem."
+                        }
+                    )
+                }
+            }
         )
     } else {
         DashboardScreen(
             dsaProblems = dsaProblems,
             currentCgpa = academicRecord.currentCgpa,
             onCgpaClick = { showAcademicsScreen = true },
-            onDsaClick = { showDsaScreen = true },
+            onDsaClick = {
+                dsaLoadError = ""
+                showDsaScreen = true
+            },
             onProfileClick = { showProfileScreen = true }
         )
     }
@@ -952,8 +1122,8 @@ private fun AcademicsScreen(
     onBack: () -> Unit,
     onCgpaClick: () -> Unit,
     onSaveSemesters: (List<String>) -> Unit,
-    onAddEvent: (AcademicEvent, (Boolean, String) -> Unit) -> Unit,
-    onUpdateEvent: (AcademicEvent, (Boolean, String) -> Unit) -> Unit,
+    onAddEvent: (AcademicEvent) -> Unit,
+    onUpdateEvent: (AcademicEvent) -> Unit,
     onDeleteEvent: (Long) -> Unit,
     onCompleteEvent: (Long) -> Unit,
     onCancelEvent: (Long) -> Unit
@@ -1156,13 +1326,9 @@ private fun AcademicsScreen(
         AddAcademicEventScreen(
             initialEvent = null,
             onBack = { showAddEvent = false },
-            onSave = { event, result ->
-                onAddEvent(event) { success, message ->
-                    result(success, message)
-                    if (success) {
-                        showAddEvent = false
-                    }
-                }
+            onSave = {
+                onAddEvent(it)
+                showAddEvent = false
             }
         )
     }
@@ -1171,13 +1337,9 @@ private fun AcademicsScreen(
         AddAcademicEventScreen(
             initialEvent = event,
             onBack = { editingEvent = null },
-            onSave = { updated, result ->
-                onUpdateEvent(updated) { success, message ->
-                    result(success, message)
-                    if (success) {
-                        editingEvent = null
-                    }
-                }
+            onSave = {
+                onUpdateEvent(it)
+                editingEvent = null
             }
         )
     }
@@ -1498,7 +1660,7 @@ private fun AcademicEventRow(
 private fun AddAcademicEventScreen(
     initialEvent: AcademicEvent?,
     onBack: () -> Unit,
-    onSave: (AcademicEvent, (Boolean, String) -> Unit) -> Unit
+    onSave: (AcademicEvent) -> Unit
 ) {
     var title by remember { mutableStateOf(initialEvent?.title ?: "") }
     var subject by remember { mutableStateOf(initialEvent?.subject ?: "") }
@@ -1507,7 +1669,6 @@ private fun AddAcademicEventScreen(
     var syllabus by remember { mutableStateOf(initialEvent?.syllabus ?: "") }
     var notes by remember { mutableStateOf(initialEvent?.notes ?: "") }
     var error by remember { mutableStateOf("") }
-    var isSaving by remember { mutableStateOf(false) }
 
     val types = listOf(
         "Assignment", "Class Test", "Viva", "Practical", "Quiz",
@@ -1640,58 +1801,37 @@ private fun AddAcademicEventScreen(
             Button(
                 onClick = {
                     val parsed = parseAcademicDate(date)
-
                     when {
-                        title.trim().isEmpty() -> {
-                            error = "Please enter an event title."
-                        }
-
-                        subject.trim().isEmpty() -> {
-                            error = "Please enter the subject."
-                        }
-
-                        parsed == null -> {
-                            error = "Use a valid date in YYYY-MM-DD format."
-                        }
-
+                        title.trim().isEmpty() -> error = "Please enter an event title."
+                        subject.trim().isEmpty() -> error = "Please enter the subject."
+                        parsed == null -> error = "Use a valid date in YYYY-MM-DD format."
                         else -> {
-                            error = ""
-                            isSaving = true
-
-                            val eventToSave = AcademicEvent(
-                                id = initialEvent?.id ?: System.currentTimeMillis(),
-                                title = title.trim(),
-                                subject = subject.trim(),
-                                type = type,
-                                date = date,
-                                day = parsed.first,
-                                syllabus = syllabus.trim(),
-                                notes = notes.trim(),
-                                status = when (initialEvent?.status) {
-                                    "COMPLETED" -> "COMPLETED"
-                                    "CANCELLED" -> "CANCELLED"
-                                    else -> "UPCOMING"
-                                }
-                            )
-
-                            onSave(eventToSave) { success, message ->
-                                isSaving = false
-                                if (!success) {
-                                    error = message.ifBlank {
-                                        "Unable to save the academic event."
+                            onSave(
+                                AcademicEvent(
+                                    id = initialEvent?.id ?: System.currentTimeMillis(),
+                                    title = title.trim(),
+                                    subject = subject.trim(),
+                                    type = type,
+                                    date = date,
+                                    day = parsed.first,
+                                    syllabus = syllabus.trim(),
+                                    notes = notes.trim(),
+                                    status = when (initialEvent?.status) {
+                                        "COMPLETED" -> "COMPLETED"
+                                        "CANCELLED" -> "CANCELLED"
+                                        else -> "UPCOMING"
                                     }
-                                }
-                            }
+                                )
+                            )
                         }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isSaving,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
                 shape = RoundedCornerShape(15.dp)
             ) {
                 Text(
-                    if (isSaving) "SAVING..." else if (initialEvent == null) "SAVE EVENT" else "SAVE CHANGES",
+                    if (initialEvent == null) "SAVE EVENT" else "SAVE CHANGES",
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -1750,31 +1890,19 @@ private fun parseAcademicDate(value: String): Pair<String, String>? {
 @Composable
 private fun DSAScreen(
     problems: List<DSAProblem>,
+    isLoading: Boolean,
+    errorMessage: String,
     onBack: () -> Unit,
-    onAddProblem: (DSAProblem) -> Unit
+    onAddProblem: (DSAProblem, (Boolean, String) -> Unit) -> Unit,
+    onDeleteProblem: (DSAProblem) -> Unit
 ) {
-
-    var showAddProblem by remember {
-        mutableStateOf(false)
-    }
+    var showAddProblem by remember { mutableStateOf(false) }
 
     val dsaScore = calculateDsaProgress(problems)
-
-    val easyCount = problems.count {
-        it.difficulty == "Easy"
-    }
-
-    val mediumCount = problems.count {
-        it.difficulty == "Medium"
-    }
-
-    val hardCount = problems.count {
-        it.difficulty == "Hard"
-    }
-
-    val weightedScore = problems.sumOf {
-        it.score.toDouble()
-    }.toFloat()
+    val easyCount = problems.count { it.difficulty == "Easy" }
+    val mediumCount = problems.count { it.difficulty == "Medium" }
+    val hardCount = problems.count { it.difficulty == "Hard" }
+    val weightedScore = problems.sumOf { it.score.toDouble() }.toFloat()
 
     Column(
         modifier = Modifier
@@ -1783,38 +1911,24 @@ private fun DSAScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-
-        // =====================================================
-        // TOP BAR
-        // =====================================================
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-
             Text(
                 text = "‹",
                 color = Color.White,
                 fontSize = 38.sp,
-                modifier = Modifier.clickable {
-                    onBack()
-                }
+                modifier = Modifier.clickable { onBack() }
             )
-
-            Spacer(
-                modifier = Modifier.size(10.dp)
-            )
-
+            Spacer(modifier = Modifier.size(10.dp))
             Column {
-
                 Text(
                     text = "DSA",
                     color = Color.White,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.SemiBold
                 )
-
                 Text(
                     text = "PROBLEM SOLVING",
                     color = Color(0xFF00D9FF),
@@ -1824,27 +1938,17 @@ private fun DSAScreen(
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(25.dp)
-        )
-
-        // =====================================================
-        // CIRCULAR PROGRESS
-        // =====================================================
+        Spacer(modifier = Modifier.height(25.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF111116)
-            )
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
         ) {
-
             Column(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
                 Text(
                     text = "OVERALL DSA SCORE",
                     color = Color(0xFF888891),
@@ -1852,20 +1956,12 @@ private fun DSAScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                 )
-
-                Spacer(
-                    modifier = Modifier.height(15.dp)
-                )
-
+                Spacer(modifier = Modifier.height(15.dp))
                 CircularProgress(
                     progress = dsaScore / 100f,
                     percentage = dsaScore.roundToInt()
                 )
-
-                Spacer(
-                    modifier = Modifier.height(16.dp)
-                )
-
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Weighted Score  ${"%.1f".format(weightedScore)}",
                     color = Color(0xFF9A9AA4),
@@ -1874,272 +1970,157 @@ private fun DSAScreen(
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(18.dp)
-        )
-
-        // =====================================================
-        // QUICK STATS
-        // =====================================================
+        Spacer(modifier = Modifier.height(18.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-
             SmallStatCard(
                 modifier = Modifier.weight(1f),
                 title = "SOLVED",
                 value = problems.size.toString()
             )
-
             SmallStatCard(
                 modifier = Modifier.weight(1f),
                 title = "TARGET",
                 value = "100"
             )
-
             SmallStatCard(
                 modifier = Modifier.weight(1f),
                 title = "STREAK",
-                value = "7 🔥"
+                value = "100 🔥"
             )
         }
 
-        Spacer(
-            modifier = Modifier.height(22.dp)
-        )
+        Spacer(modifier = Modifier.height(22.dp))
 
-        // =====================================================
-        // DIFFICULTY
-        // =====================================================
+        SectionTitle(text = "DIFFICULTY BREAKDOWN")
+        Spacer(modifier = Modifier.height(12.dp))
 
-        SectionTitle(
-            text = "DIFFICULTY BREAKDOWN"
-        )
+        DifficultyRow(title = "EASY", count = easyCount, color = Color(0xFF65E572))
+        Spacer(modifier = Modifier.height(10.dp))
+        DifficultyRow(title = "MEDIUM", count = mediumCount, color = Color(0xFFFFD23F))
+        Spacer(modifier = Modifier.height(10.dp))
+        DifficultyRow(title = "HARD", count = hardCount, color = Color(0xFFFF7B72))
 
-        Spacer(
-            modifier = Modifier.height(12.dp)
-        )
+        Spacer(modifier = Modifier.height(25.dp))
 
-        DifficultyRow(
-            title = "EASY",
-            count = easyCount,
-            color = Color(0xFF65E572)
-        )
+        SectionTitle(text = "TOPIC MASTERY")
+        Spacer(modifier = Modifier.height(12.dp))
 
-        Spacer(
-            modifier = Modifier.height(10.dp)
-        )
+        TopicProgressRow(topic = "Arrays", progress = topicProgress(problems, "Arrays"))
+        TopicProgressRow(topic = "Strings", progress = topicProgress(problems, "Strings"))
+        TopicProgressRow(topic = "Linked List", progress = topicProgress(problems, "Linked List"))
+        TopicProgressRow(topic = "Trees / BST", progress = topicProgress(problems, "Trees / BST"))
+        TopicProgressRow(topic = "Graphs", progress = topicProgress(problems, "Graphs"))
+        TopicProgressRow(topic = "Dynamic Programming", progress = topicProgress(problems, "Dynamic Programming"))
 
-        DifficultyRow(
-            title = "MEDIUM",
-            count = mediumCount,
-            color = Color(0xFFFFD23F)
-        )
+        Spacer(modifier = Modifier.height(25.dp))
 
-        Spacer(
-            modifier = Modifier.height(10.dp)
-        )
-
-        DifficultyRow(
-            title = "HARD",
-            count = hardCount,
-            color = Color(0xFFFF7B72)
-        )
-
-        Spacer(
-            modifier = Modifier.height(25.dp)
-        )
-
-        // =====================================================
-        // TOPIC MASTERY
-        // =====================================================
-
-        SectionTitle(
-            text = "TOPIC MASTERY"
-        )
-
-        Spacer(
-            modifier = Modifier.height(12.dp)
-        )
-
-        TopicProgressRow(
-            topic = "Arrays",
-            progress = topicProgress(
-                problems,
-                "Arrays"
-            )
-        )
-
-        TopicProgressRow(
-            topic = "Strings",
-            progress = topicProgress(
-                problems,
-                "Strings"
-            )
-        )
-
-        TopicProgressRow(
-            topic = "Linked List",
-            progress = topicProgress(
-                problems,
-                "Linked List"
-            )
-        )
-
-        TopicProgressRow(
-            topic = "Trees / BST",
-            progress = topicProgress(
-                problems,
-                "Trees / BST"
-            )
-        )
-
-        TopicProgressRow(
-            topic = "Graphs",
-            progress = topicProgress(
-                problems,
-                "Graphs"
-            )
-        )
-
-        TopicProgressRow(
-            topic = "Dynamic Programming",
-            progress = topicProgress(
-                problems,
-                "Dynamic Programming"
-            )
-        )
-
-        Spacer(
-            modifier = Modifier.height(25.dp)
-        )
-
-        // =====================================================
-        // GROWTH GRAPH
-        // =====================================================
-
-        SectionTitle(
-            text = "DSA GROWTH"
-        )
-
-        Spacer(
-            modifier = Modifier.height(12.dp)
-        )
+        SectionTitle(text = "DSA GROWTH")
+        Spacer(modifier = Modifier.height(12.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF111116)
-            )
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
         ) {
-
-            Column(
-                modifier = Modifier.padding(18.dp)
-            ) {
-
+            Column(modifier = Modifier.padding(18.dp)) {
                 Text(
                     text = "LAST 6 CHECKPOINTS",
                     color = Color(0xFF777780),
                     fontSize = 9.sp,
                     letterSpacing = 1.5.sp
                 )
-
-                Spacer(
-                    modifier = Modifier.height(15.dp)
-                )
-
-                GrowthGraph(
-                    currentScore = dsaScore
-                )
+                Spacer(modifier = Modifier.height(15.dp))
+                GrowthGraph(currentScore = dsaScore)
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(25.dp)
-        )
+        Spacer(modifier = Modifier.height(25.dp))
 
-        // =====================================================
-        // RECENT PROBLEMS
-        // =====================================================
+        SectionTitle(text = "RECENT PROBLEMS")
+        Spacer(modifier = Modifier.height(12.dp))
 
-        SectionTitle(
-            text = "RECENT PROBLEMS"
-        )
+        when {
+            isLoading -> {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+                ) {
+                    Text(
+                        text = "LOADING YOUR DSA DATA...",
+                        color = Color(0xFF777780),
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(18.dp)
+                    )
+                }
+            }
 
-        Spacer(
-            modifier = Modifier.height(12.dp)
-        )
+            problems.isEmpty() -> {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Text(
+                            text = "NO PROBLEMS YET",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.height(5.dp))
+                        Text(
+                            text = "Add the problems you have solved. They will be saved to your PRISM account and restored when you reopen the app.",
+                            color = Color(0xFF777780),
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
 
-        if (problems.isEmpty()) {
+            else -> {
+                problems.takeLast(5).reversed().forEach { problem ->
+                    ProblemRow(
+                        problem = problem,
+                        onDelete = { onDeleteProblem(problem) }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
 
+        if (errorMessage.isNotBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "No problems added yet.",
-                color = Color(0xFF777780),
-                fontSize = 12.sp
+                text = errorMessage,
+                color = Color(0xFFFF7B72),
+                fontSize = 11.sp
             )
-
-        } else {
-
-            problems.takeLast(5).reversed().forEach { problem ->
-
-                ProblemRow(
-                    problem = problem
-                )
-
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
-            }
         }
 
-        Spacer(
-            modifier = Modifier.height(15.dp)
-        )
-
-        // =====================================================
-        // ADD PROBLEM
-        // =====================================================
+        Spacer(modifier = Modifier.height(15.dp))
 
         Button(
-            onClick = {
-                showAddProblem = true
-            },
+            onClick = { showAddProblem = true },
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF8B4DFF)
-            ),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
             shape = RoundedCornerShape(16.dp)
         ) {
-
-            Text(
-                text = "+  ADD PROBLEM",
-                fontWeight = FontWeight.Bold
-            )
+            Text(text = "+  ADD PROBLEM", fontWeight = FontWeight.Bold)
         }
 
-        Spacer(
-            modifier = Modifier.height(20.dp)
-        )
-
-        // =====================================================
-        // PRISM INSIGHT
-        // =====================================================
+        Spacer(modifier = Modifier.height(20.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF111116)
-            )
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
         ) {
-
-            Column(
-                modifier = Modifier.padding(20.dp)
-            ) {
-
+            Column(modifier = Modifier.padding(20.dp)) {
                 Text(
                     text = "✦  PRISM INSIGHT",
                     color = Color(0xFFB76CFF),
@@ -2147,11 +2128,7 @@ private fun DSAScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.5.sp
                 )
-
-                Spacer(
-                    modifier = Modifier.height(10.dp)
-                )
-
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = generateDsaInsight(problems),
                     color = Color.White,
@@ -2161,26 +2138,19 @@ private fun DSAScreen(
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(25.dp)
-        )
+        Spacer(modifier = Modifier.height(25.dp))
     }
 
-    // =====================================================
-    // ADD PROBLEM OVERLAY
-    // =====================================================
-
     if (showAddProblem) {
-
         AddProblemScreen(
-            onBack = {
-                showAddProblem = false
-            },
-            onSave = { problem ->
-
-                onAddProblem(problem)
-
-                showAddProblem = false
+            onBack = { showAddProblem = false },
+            onSave = { problem, result ->
+                onAddProblem(problem) { success, message ->
+                    result(success, message)
+                    if (success) {
+                        showAddProblem = false
+                    }
+                }
             }
         )
     }
@@ -2194,24 +2164,13 @@ private fun DSAScreen(
 @Composable
 private fun AddProblemScreen(
     onBack: () -> Unit,
-    onSave: (DSAProblem) -> Unit
+    onSave: (DSAProblem, (Boolean, String) -> Unit) -> Unit
 ) {
-
-    var problemName by remember {
-        mutableStateOf("")
-    }
-
-    var selectedTopic by remember {
-        mutableStateOf("Arrays")
-    }
-
-    var selectedDifficulty by remember {
-        mutableStateOf("Easy")
-    }
-
-    var error by remember {
-        mutableStateOf("")
-    }
+    var problemName by remember { mutableStateOf("") }
+    var selectedTopic by remember { mutableStateOf("Arrays") }
+    var selectedDifficulty by remember { mutableStateOf("Easy") }
+    var error by remember { mutableStateOf("") }
+    var isSaving by remember { mutableStateOf(false) }
 
     val topics = listOf(
         "Arrays",
@@ -2231,56 +2190,37 @@ private fun AddProblemScreen(
         "Bit Manipulation"
     )
 
-    val difficulties = listOf(
-        "Easy",
-        "Medium",
-        "Hard"
-    )
+    val difficulties = listOf("Easy", "Medium", "Hard")
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF050507))
     ) {
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp)
         ) {
-
-            // =================================================
-            // TOP BAR
-            // =================================================
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-
                 Text(
                     text = "‹",
                     color = Color.White,
                     fontSize = 38.sp,
-                    modifier = Modifier.clickable {
-                        onBack()
-                    }
+                    modifier = Modifier.clickable { onBack() }
                 )
-
-                Spacer(
-                    modifier = Modifier.size(10.dp)
-                )
-
+                Spacer(modifier = Modifier.size(10.dp))
                 Column {
-
                     Text(
                         text = "ADD PROBLEM",
                         color = Color.White,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.SemiBold
                     )
-
                     Text(
                         text = "UPDATE YOUR DSA JOURNEY",
                         color = Color(0xFF00D9FF),
@@ -2290,13 +2230,7 @@ private fun AddProblemScreen(
                 }
             }
 
-            Spacer(
-                modifier = Modifier.height(28.dp)
-            )
-
-            // =================================================
-            // PROBLEM NAME
-            // =================================================
+            Spacer(modifier = Modifier.height(28.dp))
 
             OutlinedTextField(
                 value = problemName,
@@ -2305,23 +2239,14 @@ private fun AddProblemScreen(
                     error = ""
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = {
-                    Text("Problem Name")
-                },
-                placeholder = {
-                    Text("e.g. Two Sum")
-                },
+                label = { Text("Problem Name") },
+                placeholder = { Text("e.g. Two Sum") },
                 singleLine = true,
-                isError = error.isNotEmpty()
+                isError = error.isNotEmpty(),
+                enabled = !isSaving
             )
 
-            Spacer(
-                modifier = Modifier.height(22.dp)
-            )
-
-            // =================================================
-            // DIFFICULTY
-            // =================================================
+            Spacer(modifier = Modifier.height(22.dp))
 
             Text(
                 text = "DIFFICULTY",
@@ -2330,33 +2255,20 @@ private fun AddProblemScreen(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp
             )
-
-            Spacer(
-                modifier = Modifier.height(10.dp)
-            )
+            Spacer(modifier = Modifier.height(10.dp))
 
             difficulties.forEach { difficulty ->
-
                 ChoiceButton(
                     text = difficulty,
                     selected = selectedDifficulty == difficulty,
                     onClick = {
-                        selectedDifficulty = difficulty
+                        if (!isSaving) selectedDifficulty = difficulty
                     }
                 )
-
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
-            Spacer(
-                modifier = Modifier.height(15.dp)
-            )
-
-            // =================================================
-            // TOPIC
-            // =================================================
+            Spacer(modifier = Modifier.height(15.dp))
 
             Text(
                 text = "TOPIC",
@@ -2365,32 +2277,21 @@ private fun AddProblemScreen(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp
             )
-
-            Spacer(
-                modifier = Modifier.height(10.dp)
-            )
+            Spacer(modifier = Modifier.height(10.dp))
 
             topics.forEach { topic ->
-
                 ChoiceButton(
                     text = topic,
                     selected = selectedTopic == topic,
                     onClick = {
-                        selectedTopic = topic
+                        if (!isSaving) selectedTopic = topic
                     }
                 )
-
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             if (error.isNotEmpty()) {
-
-                Spacer(
-                    modifier = Modifier.height(10.dp)
-                )
-
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = error,
                     color = Color(0xFFFF6B6B),
@@ -2398,13 +2299,7 @@ private fun AddProblemScreen(
                 )
             }
 
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
-
-            // =================================================
-            // PREVIEW SCORE
-            // =================================================
+            Spacer(modifier = Modifier.height(20.dp))
 
             val previewScore = calculateProblemScore(
                 selectedDifficulty,
@@ -2414,15 +2309,9 @@ private fun AddProblemScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFF111116)
-                )
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
             ) {
-
-                Column(
-                    modifier = Modifier.padding(18.dp)
-                ) {
-
+                Column(modifier = Modifier.padding(18.dp)) {
                     Text(
                         text = "PRISM WEIGHT",
                         color = Color(0xFF888891),
@@ -2430,22 +2319,14 @@ private fun AddProblemScreen(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.5.sp
                     )
-
-                    Spacer(
-                        modifier = Modifier.height(7.dp)
-                    )
-
+                    Spacer(modifier = Modifier.height(7.dp))
                     Text(
                         text = "${"%.1f".format(previewScore)} points",
                         color = Color(0xFF00D9FF),
                         fontSize = 25.sp,
                         fontWeight = FontWeight.Bold
                     )
-
-                    Spacer(
-                        modifier = Modifier.height(5.dp)
-                    )
-
+                    Spacer(modifier = Modifier.height(5.dp))
                     Text(
                         text = "Difficulty + topic importance",
                         color = Color(0xFF777780),
@@ -2454,49 +2335,46 @@ private fun AddProblemScreen(
                 }
             }
 
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
-
-            // =================================================
-            // SAVE
-            // =================================================
+            Spacer(modifier = Modifier.height(20.dp))
 
             Button(
                 onClick = {
+                    val cleanName = problemName.trim()
 
-                    if (problemName.trim().isEmpty()) {
-
+                    if (cleanName.isEmpty()) {
                         error = "Please enter a problem name."
+                        return@Button
+                    }
 
-                    } else {
+                    error = ""
+                    isSaving = true
 
-                        onSave(
-                            DSAProblem(
-                                name = problemName.trim(),
-                                topic = selectedTopic,
-                                difficulty = selectedDifficulty,
-                                score = previewScore
-                            )
+                    onSave(
+                        DSAProblem(
+                            name = cleanName,
+                            topic = selectedTopic,
+                            difficulty = selectedDifficulty,
+                            score = previewScore
                         )
+                    ) { success, message ->
+                        isSaving = false
+                        if (!success) {
+                            error = message.ifBlank { "Unable to save problem." }
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF8B4DFF)
-                ),
+                enabled = !isSaving,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
                 shape = RoundedCornerShape(16.dp)
             ) {
-
                 Text(
-                    text = "SAVE PROBLEM",
+                    text = if (isSaving) "SAVING..." else "SAVE PROBLEM",
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            Spacer(
-                modifier = Modifier.height(30.dp)
-            )
+            Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }
@@ -2782,38 +2660,26 @@ private fun TopicProgressRow(
 
 @Composable
 private fun ProblemRow(
-    problem: DSAProblem
+    problem: DSAProblem,
+    onDelete: () -> Unit
 ) {
-
-    val difficultyColor = when (
-        problem.difficulty
-    ) {
-
-        "Easy" ->
-            Color(0xFF65E572)
-
-        "Medium" ->
-            Color(0xFFFFD23F)
-
-        else ->
-            Color(0xFFFF7B72)
+    val difficultyColor = when (problem.difficulty) {
+        "Easy" -> Color(0xFF65E572)
+        "Medium" -> Color(0xFFFFD23F)
+        else -> Color(0xFFFF7B72)
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF111116)
-        )
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
     ) {
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(15.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-
             Box(
                 modifier = Modifier
                     .size(28.dp)
@@ -2823,7 +2689,6 @@ private fun ProblemRow(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-
                 Text(
                     text = "✓",
                     color = Color(0xFF65E572),
@@ -2831,25 +2696,16 @@ private fun ProblemRow(
                 )
             }
 
-            Spacer(
-                modifier = Modifier.size(11.dp)
-            )
+            Spacer(modifier = Modifier.size(11.dp))
 
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = problem.name,
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
-
-                Spacer(
-                    modifier = Modifier.height(3.dp)
-                )
-
+                Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     text = problem.topic,
                     color = Color(0xFF777780),
@@ -2857,12 +2713,29 @@ private fun ProblemRow(
                 )
             }
 
-            Text(
-                text = problem.difficulty,
-                color = difficultyColor,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = problem.difficulty,
+                    color = difficultyColor,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedButton(
+                    onClick = onDelete,
+                    modifier = Modifier.height(32.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 10.dp,
+                        vertical = 0.dp
+                    ),
+                    shape = RoundedCornerShape(9.dp)
+                ) {
+                    Text(
+                        text = "DELETE",
+                        fontSize = 8.sp
+                    )
+                }
+            }
         }
     }
 }
@@ -3787,7 +3660,7 @@ private fun calculateDsaProgress(
      * Therefore 100 × 2 = 200 weighted points.
      */
 
-    val targetWeightedScore = 200f
+    val targetWeightedScore = 1000f
 
     return (
             weightedScore.toFloat() /
@@ -3816,11 +3689,11 @@ private fun topicProgress(
 
     /*
      * Current topic milestone:
-     * 10 solved problems = 100%
+     * 30 solved problems = 100%
      */
 
     return (
-            topicCount / 10f
+            topicCount / 30f
             ).coerceIn(
             0f,
             1f
