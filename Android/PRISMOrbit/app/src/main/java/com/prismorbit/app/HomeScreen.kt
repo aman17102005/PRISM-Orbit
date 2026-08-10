@@ -53,9 +53,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import java.util.Calendar
+import java.net.URL
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.storage.FirebaseStorage
 import kotlin.math.roundToInt
 
 
@@ -69,6 +73,68 @@ data class DSAProblem(
     val difficulty: String,
     val score: Float
 )
+
+
+data class AcademicRecord(
+    val currentCgpa: String = "8.7",
+    val targetCgpa: String = "9.0",
+    val sem1: String = "8.4",
+    val sem2: String = "8.7",
+    val sem3: String = "",
+    val sem4: String = "",
+    val sem5: String = "",
+    val sem6: String = "",
+    val sem7: String = "",
+    val sem8: String = ""
+)
+
+private fun AcademicRecord.toMap(): Map<String, Any> = mapOf(
+    "currentCgpa" to currentCgpa,
+    "targetCgpa" to targetCgpa,
+    "sem1" to sem1,
+    "sem2" to sem2,
+    "sem3" to sem3,
+    "sem4" to sem4,
+    "sem5" to sem5,
+    "sem6" to sem6,
+    "sem7" to sem7,
+    "sem8" to sem8
+)
+
+private fun loadAcademicRecord(document: com.google.firebase.firestore.DocumentSnapshot): AcademicRecord {
+    fun value(key: String, fallback: String): String {
+        val raw = document.get(key) ?: return fallback
+        return raw.toString().trim().ifBlank { fallback }
+    }
+
+    return AcademicRecord(
+        currentCgpa = value("currentCgpa", "8.7"),
+        targetCgpa = value("targetCgpa", "9.0"),
+        sem1 = value("sem1", "8.4"),
+        sem2 = value("sem2", "8.7"),
+        sem3 = value("sem3", ""),
+        sem4 = value("sem4", ""),
+        sem5 = value("sem5", ""),
+        sem6 = value("sem6", ""),
+        sem7 = value("sem7", ""),
+        sem8 = value("sem8", "")
+    )
+}
+
+private fun saveAcademicRecord(
+    firestore: FirebaseFirestore,
+    uid: String,
+    record: AcademicRecord,
+    onSuccess: () -> Unit = {},
+    onError: (Exception) -> Unit = {}
+) {
+    firestore
+        .collection("users")
+        .document(uid)
+        .set(record.toMap(), SetOptions.merge())
+        .addOnSuccessListener { onSuccess() }
+        .addOnFailureListener { onError(it) }
+}
 
 data class AcademicEvent(
     val id: Long = System.currentTimeMillis(),
@@ -88,15 +154,19 @@ data class AcademicEvent(
 // =========================================================
 
 @Composable
-fun HomeScreen(
-    onLogout: () -> Unit
-) {
+fun HomeScreen() {
+    val auth = FirebaseAuth.getInstance()
+    val firestore = FirebaseFirestore.getInstance()
+    val signedInUser = auth.currentUser
 
     var showCgpaScreen by remember { mutableStateOf(false) }
     var showAcademicsScreen by remember { mutableStateOf(false) }
     var returnToAcademics by remember { mutableStateOf(false) }
     var showDsaScreen by remember { mutableStateOf(false) }
     var showProfileScreen by remember { mutableStateOf(false) }
+
+    var academicRecord by remember { mutableStateOf(AcademicRecord()) }
+    var academicLoadError by remember { mutableStateOf("") }
 
     val academicEvents = remember { mutableStateListOf<AcademicEvent>() }
 
@@ -110,19 +180,82 @@ fun HomeScreen(
         )
     }
 
+    LaunchedEffect(signedInUser?.uid) {
+        val uid = signedInUser?.uid
+        if (uid != null) {
+            firestore
+                .collection("users")
+                .document(uid)
+                .get()
+                .addOnSuccessListener { document ->
+                    academicRecord = loadAcademicRecord(document)
+                    academicLoadError = ""
+                }
+                .addOnFailureListener { error ->
+                    academicLoadError = error.message ?: "Unable to load academic data."
+                }
+        }
+    }
+
+    fun persistAcademicRecord(
+        updated: AcademicRecord,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        val uid = signedInUser?.uid
+        if (uid == null) {
+            onError("No signed-in user found.")
+            return
+        }
+
+        saveAcademicRecord(
+            firestore = firestore,
+            uid = uid,
+            record = updated,
+            onSuccess = {
+                academicRecord = updated
+                academicLoadError = ""
+                onSuccess()
+            },
+            onError = { error ->
+                academicLoadError = error.message ?: "Unable to save academic data."
+                onError(academicLoadError)
+            }
+        )
+    }
+
     if (showProfileScreen) {
         ProfileScreen(
             onBack = { showProfileScreen = false }
         )
     } else if (showAcademicsScreen) {
         AcademicsScreen(
-            currentCgpa = 8.7f,
+            currentCgpa = academicRecord.currentCgpa.toFloatOrNull() ?: 8.7f,
+            targetCgpa = academicRecord.targetCgpa.toFloatOrNull() ?: 9.0f,
+            semesterValues = listOf(
+                academicRecord.sem1, academicRecord.sem2, academicRecord.sem3, academicRecord.sem4,
+                academicRecord.sem5, academicRecord.sem6, academicRecord.sem7, academicRecord.sem8
+            ),
             events = academicEvents,
             onBack = { showAcademicsScreen = false },
             onCgpaClick = {
                 showAcademicsScreen = false
                 showCgpaScreen = true
                 returnToAcademics = true
+            },
+            onSaveSemesters = { values ->
+                persistAcademicRecord(
+                    academicRecord.copy(
+                        sem1 = values.getOrElse(0) { "" },
+                        sem2 = values.getOrElse(1) { "" },
+                        sem3 = values.getOrElse(2) { "" },
+                        sem4 = values.getOrElse(3) { "" },
+                        sem5 = values.getOrElse(4) { "" },
+                        sem6 = values.getOrElse(5) { "" },
+                        sem7 = values.getOrElse(6) { "" },
+                        sem8 = values.getOrElse(7) { "" }
+                    )
+                )
             },
             onAddEvent = { event -> academicEvents.add(event) },
             onUpdateEvent = { updated ->
@@ -141,6 +274,19 @@ fun HomeScreen(
         )
     } else if (showCgpaScreen) {
         CGPAScreen(
+            initialCurrentCgpa = academicRecord.currentCgpa,
+            initialTargetCgpa = academicRecord.targetCgpa,
+            saveError = academicLoadError,
+            onSave = { current, target, result ->
+                persistAcademicRecord(
+                    updated = academicRecord.copy(
+                        currentCgpa = current,
+                        targetCgpa = target
+                    ),
+                    onSuccess = { result(true, "") },
+                    onError = { message -> result(false, message) }
+                )
+            },
             onBack = {
                 showCgpaScreen = false
                 if (returnToAcademics) {
@@ -158,6 +304,7 @@ fun HomeScreen(
     } else {
         DashboardScreen(
             dsaProblems = dsaProblems,
+            currentCgpa = academicRecord.currentCgpa,
             onCgpaClick = { showAcademicsScreen = true },
             onDsaClick = { showDsaScreen = true },
             onProfileClick = { showProfileScreen = true }
@@ -173,53 +320,11 @@ fun HomeScreen(
 @Composable
 private fun DashboardScreen(
     dsaProblems: List<DSAProblem>,
+    currentCgpa: String,
     onCgpaClick: () -> Unit,
     onDsaClick: () -> Unit,
     onProfileClick: () -> Unit
 ) {
-
-    val auth = FirebaseAuth.getInstance()
-    val firestore = FirebaseFirestore.getInstance()
-    val signedInUser = auth.currentUser
-
-    var dashboardUserName by remember {
-        mutableStateOf(
-            signedInUser?.displayName?.trim()?.takeIf { it.isNotBlank() }
-                ?: signedInUser?.email?.substringBefore("@")?.takeIf { it.isNotBlank() }
-                ?: "User"
-        )
-    }
-
-    LaunchedEffect(signedInUser?.uid) {
-        val uid = signedInUser?.uid
-
-        if (uid != null) {
-            firestore
-                .collection("users")
-                .document(uid)
-                .get()
-                .addOnSuccessListener { document ->
-                    val firestoreName = document.getString("name")?.trim()
-
-                    if (!firestoreName.isNullOrBlank()) {
-                        dashboardUserName = firestoreName
-                    }
-                }
-        }
-    }
-
-    val greetingName = dashboardUserName
-        .trim()
-        .split(Regex("\\s+"))
-        .firstOrNull()
-        ?.takeIf { it.isNotBlank() }
-        ?: "User"
-
-    val profileInitial = greetingName
-        .firstOrNull()
-        ?.uppercaseChar()
-        ?.toString()
-        ?: "U"
 
     val dsaScore = calculateDsaProgress(dsaProblems)
 
@@ -283,7 +388,7 @@ private fun DashboardScreen(
             ) {
 
                 Text(
-                    text = profileInitial,
+                    text = "A",
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
@@ -300,7 +405,7 @@ private fun DashboardScreen(
         // =====================================================
 
         Text(
-            text = "Welcome back, $greetingName.",
+            text = "Welcome back, Aman.",
             color = Color.White,
             fontSize = 25.sp,
             fontWeight = FontWeight.SemiBold
@@ -468,7 +573,7 @@ private fun DashboardScreen(
                         onCgpaClick()
                     },
                 title = "CGPA",
-                value = "8.7",
+                value = currentCgpa,
                 subtitle = "Academics",
                 accent = Color(0xFFB76CFF)
             )
@@ -612,18 +717,25 @@ private fun DashboardScreen(
 @Composable
 private fun AcademicsScreen(
     currentCgpa: Float,
+    targetCgpa: Float,
+    semesterValues: List<String>,
     events: List<AcademicEvent>,
     onBack: () -> Unit,
     onCgpaClick: () -> Unit,
+    onSaveSemesters: (List<String>) -> Unit,
     onAddEvent: (AcademicEvent) -> Unit,
     onUpdateEvent: (AcademicEvent) -> Unit,
     onDeleteEvent: (Long) -> Unit,
     onCompleteEvent: (Long) -> Unit,
     onCancelEvent: (Long) -> Unit
 ) {
-
     var showAddEvent by remember { mutableStateOf(false) }
     var editingEvent by remember { mutableStateOf<AcademicEvent?>(null) }
+    var editSemesters by remember { mutableStateOf(false) }
+    var semesterDrafts by remember(semesterValues) { mutableStateOf(semesterValues.toMutableList()) }
+    var semesterError by remember { mutableStateOf("") }
+
+    val semesterNames = listOf("SEM 1", "SEM 2", "SEM 3", "SEM 4", "SEM 5", "SEM 6", "SEM 7", "SEM 8")
 
     Column(
         modifier = Modifier
@@ -632,7 +744,6 @@ private fun AcademicsScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -645,18 +756,8 @@ private fun AcademicsScreen(
             )
             Spacer(modifier = Modifier.size(10.dp))
             Column {
-                Text(
-                    text = "ACADEMICS",
-                    color = Color.White,
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "PERFORMANCE + PLANNING",
-                    color = Color(0xFFB76CFF),
-                    fontSize = 8.sp,
-                    letterSpacing = 1.8.sp
-                )
+                Text("ACADEMICS", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
+                Text("PERFORMANCE + PLANNING", color = Color(0xFFB76CFF), fontSize = 8.sp, letterSpacing = 1.8.sp)
             }
         }
 
@@ -668,13 +769,7 @@ private fun AcademicsScreen(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text(
-                    text = "ACADEMIC OVERVIEW",
-                    color = Color(0xFF888891),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                )
+                Text("ACADEMIC OVERVIEW", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -682,25 +777,10 @@ private fun AcademicsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text(
-                            text = "${"%.1f".format(currentCgpa)}",
-                            color = Color.White,
-                            fontSize = 42.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "CURRENT CGPA",
-                            color = Color(0xFF777780),
-                            fontSize = 9.sp,
-                            letterSpacing = 1.2.sp
-                        )
+                        Text("${"%.1f".format(currentCgpa)}", color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
+                        Text("CURRENT CGPA", color = Color(0xFF777780), fontSize = 9.sp, letterSpacing = 1.2.sp)
                     }
-                    Text(
-                        text = "TARGET  9.0",
-                        color = Color(0xFF00D9FF),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("TARGET  ${"%.1f".format(targetCgpa)}", color = Color(0xFF00D9FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(15.dp))
                 ProgressBar(progress = (currentCgpa / 10f).coerceIn(0f, 1f))
@@ -717,17 +797,75 @@ private fun AcademicsScreen(
         }
 
         Spacer(modifier = Modifier.height(22.dp))
-        SectionTitle(text = "SEMESTER TRACKER")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SectionTitle(text = "SEMESTER TRACKER")
+            OutlinedButton(
+                onClick = {
+                    if (!editSemesters) semesterDrafts = semesterValues.toMutableList()
+                    semesterError = ""
+                    editSemesters = !editSemesters
+                },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(if (editSemesters) "CANCEL" else "EDIT", fontSize = 9.sp)
+            }
+        }
         Spacer(modifier = Modifier.height(12.dp))
 
-        SemesterRow("SEM 1", "8.4", true)
-        SemesterRow("SEM 2", "8.7", true)
-        SemesterRow("SEM 3", "—", false)
-        SemesterRow("SEM 4", "—", false)
-        SemesterRow("SEM 5", "—", false)
-        SemesterRow("SEM 6", "—", false)
-        SemesterRow("SEM 7", "—", false)
-        SemesterRow("SEM 8", "—", false)
+        if (editSemesters) {
+            semesterNames.forEachIndexed { index, name ->
+                OutlinedTextField(
+                    value = semesterDrafts.getOrElse(index) { "" },
+                    onValueChange = { value ->
+                        val cleaned = value.filter { it.isDigit() || it == '.' }
+                        val updated = semesterDrafts.toMutableList()
+                        while (updated.size < 8) updated.add("")
+                        updated[index] = cleaned
+                        semesterDrafts = updated
+                        semesterError = ""
+                    },
+                    label = { Text("$name SGPA") },
+                    placeholder = { Text(if (index < 2) "e.g. 8.4" else "Leave blank until completed") },
+                    supportingText = { Text("0.0 – 10.0; blank = not completed") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 7.dp),
+                    singleLine = true
+                )
+            }
+
+            if (semesterError.isNotEmpty()) {
+                Text(semesterError, color = Color(0xFFFF6B6B), fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Button(
+                onClick = {
+                    val valid = semesterDrafts.all { it.isBlank() || (it.toFloatOrNull()?.let { value -> value in 0f..10f } == true) }
+                    if (!valid) {
+                        semesterError = "Each SGPA must be between 0.0 and 10.0."
+                    } else {
+                        onSaveSemesters(semesterDrafts.map { it.trim() })
+                        semesterError = ""
+                        editSemesters = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
+                shape = RoundedCornerShape(15.dp)
+            ) {
+                Text("SAVE SEMESTERS", fontWeight = FontWeight.Bold)
+            }
+        } else {
+            semesterNames.forEachIndexed { index, name ->
+                val value = semesterValues.getOrElse(index) { "" }.trim()
+                SemesterRow(name, value, value.isNotBlank())
+            }
+        }
 
         Spacer(modifier = Modifier.height(22.dp))
         SectionTitle(text = "SEMESTER GROWTH")
@@ -739,14 +877,9 @@ private fun AcademicsScreen(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
-                Text(
-                    text = "SGPA TREND",
-                    color = Color(0xFF777780),
-                    fontSize = 9.sp,
-                    letterSpacing = 1.5.sp
-                )
+                Text("SGPA TREND", color = Color(0xFF777780), fontSize = 9.sp, letterSpacing = 1.5.sp)
                 Spacer(modifier = Modifier.height(12.dp))
-                AcademicGrowthGraph()
+                AcademicGrowthGraph(semesterValues)
             }
         }
 
@@ -754,11 +887,7 @@ private fun AcademicsScreen(
         SectionTitle(text = "ACADEMIC PLANNER")
         Spacer(modifier = Modifier.height(12.dp))
 
-        AcademicCalendar(
-            events = events,
-            onAddEvent = { showAddEvent = true }
-        )
-
+        AcademicCalendar(events = events, onAddEvent = { showAddEvent = true })
         Spacer(modifier = Modifier.height(22.dp))
 
         if (events.isNotEmpty()) {
@@ -786,11 +915,7 @@ private fun AcademicsScreen(
                 Column(modifier = Modifier.padding(18.dp)) {
                     Text("NO UPCOMING EVENTS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     Spacer(modifier = Modifier.height(5.dp))
-                    Text(
-                        "Add your assignments, tests, viva, practicals and exams here.",
-                        color = Color(0xFF777780),
-                        fontSize = 10.sp
-                    )
+                    Text("Add your assignments, tests, viva, practicals and exams here.", color = Color(0xFF777780), fontSize = 10.sp)
                 }
             }
         }
@@ -849,16 +974,23 @@ private fun SemesterRow(name: String, sgpa: String, completed: Boolean) {
 }
 
 @Composable
-private fun AcademicGrowthGraph() {
-    val points = listOf(7.8f, 8.1f, 8.4f, 8.7f)
+private fun AcademicGrowthGraph(semesterValues: List<String>) {
+    val parsed = semesterValues.mapNotNull { it.toFloatOrNull()?.takeIf { value -> value in 0f..10f } }
+    val points = when {
+        parsed.size >= 2 -> parsed
+        parsed.size == 1 -> listOf(parsed.first(), parsed.first())
+        else -> listOf(8f, 8f)
+    }
+
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(150.dp)
     ) {
         val max = 10f
-        val min = 6f
-        val step = size.width / (points.size - 1)
+        val min = 0f
+        val step = size.width / (points.size - 1).coerceAtLeast(1)
+
         for (i in 0..4) {
             val y = size.height * i / 4f
             drawLine(
@@ -868,12 +1000,14 @@ private fun AcademicGrowthGraph() {
                 strokeWidth = 1.dp.toPx()
             )
         }
+
         val offsets = points.mapIndexed { index, value ->
             Offset(
                 x = index * step,
                 y = size.height - ((value - min) / (max - min)).coerceIn(0f, 1f) * size.height
             )
         }
+
         for (i in 0 until offsets.size - 1) {
             drawLine(
                 brush = Brush.linearGradient(listOf(Color(0xFFB76CFF), Color(0xFF00D9FF))),
@@ -883,6 +1017,7 @@ private fun AcademicGrowthGraph() {
                 cap = StrokeCap.Round
             )
         }
+
         offsets.forEach {
             drawCircle(Color(0xFF00D9FF), 5.dp.toPx(), it)
         }
@@ -2641,45 +2776,26 @@ private fun SectionTitle(
 
 @Composable
 private fun CGPAScreen(
+    initialCurrentCgpa: String,
+    initialTargetCgpa: String,
+    saveError: String,
+    onSave: (String, String, (Boolean, String) -> Unit) -> Unit,
     onBack: () -> Unit
 ) {
-
-    var currentCgpa by remember {
-        mutableStateOf("8.7")
-    }
-
-    var targetCgpa by remember {
-        mutableStateOf("9.0")
-    }
-
-    var editMode by remember {
-        mutableStateOf(false)
-    }
-
-    var validationError by remember {
-        mutableStateOf("")
-    }
+    var currentCgpa by remember(initialCurrentCgpa) { mutableStateOf(initialCurrentCgpa) }
+    var targetCgpa by remember(initialTargetCgpa) { mutableStateOf(initialTargetCgpa) }
+    var editMode by remember { mutableStateOf(false) }
+    var validationError by remember { mutableStateOf("") }
+    var savedMessage by remember { mutableStateOf("") }
+    var isSaving by remember { mutableStateOf(false) }
 
     val current = currentCgpa.toFloatOrNull()
     val target = targetCgpa.toFloatOrNull()
-
-    val validCurrent =
-        current != null && current in 4f..10f
-
-    val validTarget =
-        target != null && target in 4f..10f
-
-    val progress = if (
-        validCurrent &&
-        validTarget &&
-        target!! > 0f
-    ) {
-
-        (current!! / target)
-            .coerceIn(0f, 1f)
-
+    val validCurrent = current != null && current in 4f..10f
+    val validTarget = target != null && target in 4f..10f
+    val progress = if (validCurrent && validTarget && target!! > 0f) {
+        (current!! / target).coerceIn(0f, 1f)
     } else {
-
         0f
     }
 
@@ -2690,120 +2806,44 @@ private fun CGPAScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-
-        // =====================================================
-        // TOP BAR
-        // =====================================================
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-
             Text(
                 text = "‹",
                 color = Color.White,
                 fontSize = 38.sp,
-                modifier = Modifier.clickable {
-                    onBack()
-                }
+                modifier = Modifier.clickable { onBack() }
             )
-
-            Spacer(
-                modifier = Modifier.size(10.dp)
-            )
-
+            Spacer(modifier = Modifier.size(10.dp))
             Column {
-
-                Text(
-                    text = "CGPA",
-                    color = Color.White,
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                Text(
-                    text = "ACADEMIC PERFORMANCE",
-                    color = Color(0xFFB76CFF),
-                    fontSize = 8.sp,
-                    letterSpacing = 1.8.sp
-                )
+                Text("CGPA", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
+                Text("ACADEMIC PERFORMANCE", color = Color(0xFFB76CFF), fontSize = 8.sp, letterSpacing = 1.8.sp)
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(30.dp)
-        )
-
-        // =====================================================
-        // CURRENT CGPA
-        // =====================================================
+        Spacer(modifier = Modifier.height(30.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF111116)
-            )
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
         ) {
-
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-
-                Text(
-                    text = "CURRENT CGPA",
-                    color = Color(0xFF888891),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                )
-
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
-
-                Text(
-                    text = currentCgpa,
-                    color = Color.White,
-                    fontSize = 58.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Text(
-                    text = "VALID RANGE: 4.0 – 10.0",
-                    color = Color(0xFF777780),
-                    fontSize = 9.sp,
-                    letterSpacing = 1.2.sp
-                )
-
-                Spacer(
-                    modifier = Modifier.height(22.dp)
-                )
-
-                ProgressBar(
-                    progress = progress
-                )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("CURRENT CGPA", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(currentCgpa, color = Color.White, fontSize = 58.sp, fontWeight = FontWeight.Bold)
+                Text("VALID RANGE: 4.0 – 10.0", color = Color(0xFF777780), fontSize = 9.sp, letterSpacing = 1.2.sp)
+                Spacer(modifier = Modifier.height(22.dp))
+                ProgressBar(progress = progress)
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = when {
-
-                        !validCurrent ->
-                            "Enter a valid CGPA"
-
-                        !validTarget ->
-                            "Set a valid target"
-
-                        current!! >= target!! ->
-                            "Target achieved 🎯"
-
-                        else ->
-                            "${"%.1f".format(target - current)} points to target"
+                        !validCurrent -> "Enter a valid CGPA"
+                        !validTarget -> "Set a valid target"
+                        current!! >= target!! -> "Target achieved 🎯"
+                        else -> "${"%.1f".format(target - current)} points to target"
                     },
                     color = Color(0xFF9999A3),
                     fontSize = 11.sp
@@ -2811,214 +2851,112 @@ private fun CGPAScreen(
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(24.dp)
-        )
-
-        // =====================================================
-        // TARGET
-        // =====================================================
+        Spacer(modifier = Modifier.height(24.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF111116)
-            )
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
         ) {
-
-            Column(
-                modifier = Modifier.padding(20.dp)
-            ) {
-
-                Text(
-                    text = "YOUR TARGET",
-                    color = Color(0xFF888891),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                )
-
-                Spacer(
-                    modifier = Modifier.height(7.dp)
-                )
-
-                Text(
-                    text = targetCgpa,
-                    color = Color(0xFF00D9FF),
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("YOUR TARGET", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Spacer(modifier = Modifier.height(7.dp))
+                Text(targetCgpa, color = Color(0xFF00D9FF), fontSize = 30.sp, fontWeight = FontWeight.Bold)
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(20.dp)
-        )
-
-        // =====================================================
-        // EDIT SECTION
-        // =====================================================
+        Spacer(modifier = Modifier.height(20.dp))
 
         if (editMode) {
-
             OutlinedTextField(
                 value = currentCgpa,
-                onValueChange = {
-                    currentCgpa = it
-                    validationError = ""
-                },
-                label = {
-                    Text("Current CGPA")
-                },
-                supportingText = {
-                    Text("Allowed range: 4.0 – 10.0")
-                },
-                isError =
-                    currentCgpa.isNotEmpty() &&
-                            !validCurrent,
+                onValueChange = { currentCgpa = it.filter { c -> c.isDigit() || c == '.' }; validationError = ""; savedMessage = "" },
+                label = { Text("Current CGPA") },
+                supportingText = { Text("Allowed range: 4.0 – 10.0") },
+                isError = currentCgpa.isNotEmpty() && !validCurrent,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
-
+            Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
                 value = targetCgpa,
-                onValueChange = {
-                    targetCgpa = it
-                    validationError = ""
-                },
-                label = {
-                    Text("Target CGPA")
-                },
-                supportingText = {
-                    Text("Allowed range: 4.0 – 10.0")
-                },
-                isError =
-                    targetCgpa.isNotEmpty() &&
-                            !validTarget,
+                onValueChange = { targetCgpa = it.filter { c -> c.isDigit() || c == '.' }; validationError = ""; savedMessage = "" },
+                label = { Text("Target CGPA") },
+                supportingText = { Text("Allowed range: 4.0 – 10.0") },
+                isError = targetCgpa.isNotEmpty() && !validTarget,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-
-            Spacer(
-                modifier = Modifier.height(10.dp)
-            )
+            Spacer(modifier = Modifier.height(10.dp))
 
             if (validationError.isNotEmpty()) {
+                Text(validationError, color = Color(0xFFFF6B6B), fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+            }
 
-                Text(
-                    text = validationError,
-                    color = Color(0xFFFF6B6B),
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(
-                        start = 4.dp
-                    )
-                )
-
-                Spacer(
-                    modifier = Modifier.height(10.dp)
-                )
+            if (saveError.isNotEmpty()) {
+                Text(saveError, color = Color(0xFFFF6B6B), fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+                Spacer(modifier = Modifier.height(10.dp))
             }
 
             Button(
                 onClick = {
-
                     if (!validCurrent || !validTarget) {
-
-                        validationError =
-                            "CGPA must be between 4.0 and 10.0."
-
+                        validationError = "CGPA must be between 4.0 and 10.0."
                     } else {
-
                         validationError = ""
-                        editMode = false
+                        savedMessage = ""
+                        isSaving = true
+                        onSave("%.1f".format(current), "%.1f".format(target)) { success, message ->
+                            isSaving = false
+                            if (success) {
+                                savedMessage = "Academic data saved successfully."
+                                editMode = false
+                            } else {
+                                validationError = message.ifBlank { "Unable to save academic data." }
+                            }
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF8B4DFF)
-                ),
+                enabled = !isSaving,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
                 shape = RoundedCornerShape(15.dp)
             ) {
-
-                Text(
-                    text = "SAVE CHANGES",
-                    fontWeight = FontWeight.Bold
-                )
+                Text(if (isSaving) "SAVING..." else "SAVE CHANGES", fontWeight = FontWeight.Bold)
             }
-
         } else {
-
             Button(
-                onClick = {
-                    editMode = true
-                    validationError = ""
-                },
+                onClick = { editMode = true; validationError = ""; savedMessage = "" },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF15151B)
-                ),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15151B)),
                 shape = RoundedCornerShape(15.dp)
             ) {
-
-                Text(
-                    text = "EDIT CGPA",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("EDIT CGPA", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(30.dp)
-        )
+        if (savedMessage.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(savedMessage, color = Color(0xFF65E572), fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+        }
 
-        // =====================================================
-        // PRISM INSIGHT
-        // =====================================================
+        Spacer(modifier = Modifier.height(30.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF111116)
-            )
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
         ) {
-
-            Column(
-                modifier = Modifier.padding(20.dp)
-            ) {
-
-                Text(
-                    text = "✦  PRISM INSIGHT",
-                    color = Color(0xFFB76CFF),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp
-                )
-
-                Spacer(
-                    modifier = Modifier.height(10.dp)
-                )
-
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("✦  PRISM INSIGHT", color = Color(0xFFB76CFF), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = when {
-
-                        !validCurrent ->
-                            "Enter a valid CGPA between 4.0 and 10.0."
-
-                        current!! >= 9f ->
-                            "Excellent academic performance. Keep maintaining your consistency."
-
-                        current >= 8f ->
-                            "You're building a strong academic foundation. Keep pushing toward your target."
-
-                        else ->
-                            "Focus on consistency and steady improvement toward your target."
+                        !validCurrent -> "Enter a valid CGPA between 4.0 and 10.0."
+                        current!! >= 9f -> "Excellent academic performance. Keep maintaining your consistency."
+                        current >= 8f -> "You're building a strong academic foundation. Keep pushing toward your target."
+                        else -> "Focus on consistency and steady improvement toward your target."
                     },
                     color = Color.White,
                     fontSize = 14.sp,
@@ -3027,9 +2965,7 @@ private fun CGPAScreen(
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(25.dp)
-        )
+        Spacer(modifier = Modifier.height(25.dp))
     }
 }
 
@@ -3042,31 +2978,77 @@ private fun CGPAScreen(
 private fun ProfileScreen(
     onBack: () -> Unit
 ) {
-    val auth = FirebaseAuth.getInstance()
-    val firestore = FirebaseFirestore.getInstance()
-    val signedInUser = auth.currentUser
+    val auth = remember { FirebaseAuth.getInstance() }
+    val firestore = remember { FirebaseFirestore.getInstance() }
+    val storage = remember { FirebaseStorage.getInstance() }
+    val user = auth.currentUser
     val context = LocalContext.current
 
     var isEditing by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
     var isSaving by remember { mutableStateOf(false) }
-    var isUploadingPhoto by remember { mutableStateOf(false) }
-
-    var statusText by remember { mutableStateOf("") }
-    var statusIsError by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("") }
+    var messageIsError by remember { mutableStateOf(false) }
 
     var fullName by remember { mutableStateOf("") }
-    var emailAddress by remember { mutableStateOf(signedInUser?.email ?: "") }
+    var email by remember { mutableStateOf(user?.email ?: "") }
     var college by remember { mutableStateOf("") }
     var course by remember { mutableStateOf("") }
     var semester by remember { mutableStateOf("") }
     var cgpa by remember { mutableStateOf("") }
     var skills by remember { mutableStateOf("") }
     var about by remember { mutableStateOf("") }
-    var profilePhotoBase64 by remember { mutableStateOf("") }
+    var photoUrl by remember { mutableStateOf("") }
     var localPhoto by remember { mutableStateOf<Bitmap?>(null) }
 
-    if (signedInUser == null) {
+    val photoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri == null || user == null) return@rememberLauncherForActivityResult
+
+        try {
+            localPhoto = context.contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it)
+            }
+        } catch (_: Exception) {
+            localPhoto = null
+        }
+
+        message = "Uploading photo..."
+        messageIsError = false
+
+        val photoRef = storage.reference.child("users/${user.uid}/profile_photo.jpg")
+        photoRef.putFile(uri)
+            .continueWithTask { task ->
+                if (!task.isSuccessful) {
+                    throw task.exception ?: Exception("Photo upload failed.")
+                }
+                photoRef.downloadUrl
+            }
+            .addOnSuccessListener { downloadUri ->
+                photoUrl = downloadUri.toString()
+                firestore.collection("users")
+                    .document(user.uid)
+                    .set(
+                        mapOf("photoUrl" to photoUrl),
+                        SetOptions.merge()
+                    )
+                    .addOnSuccessListener {
+                        message = "Profile photo uploaded successfully."
+                        messageIsError = false
+                    }
+                    .addOnFailureListener { exception ->
+                        message = exception.message ?: "Photo saved, but profile update failed."
+                        messageIsError = true
+                    }
+            }
+            .addOnFailureListener { exception ->
+                message = exception.message ?: "Unable to upload profile photo."
+                messageIsError = true
+            }
+    }
+
+    if (user == null) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -3077,104 +3059,44 @@ private fun ProfileScreen(
         ) {
             Text("No signed-in account found.", color = Color.White)
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = onBack) {
-                Text("BACK")
-            }
+            Button(onClick = onBack) { Text("BACK") }
         }
         return
     }
 
-    // ---------------------------------------------------------
-    // PROFILE PHOTO PICKER
-    // ---------------------------------------------------------
-    // Firebase Storage is intentionally NOT used here.
-    // The selected photo is resized/compressed and stored directly
-    // in the user's Firestore document as Base64 text.
-    val profilePhotoPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { selectedUri: Uri? ->
-        if (selectedUri == null) return@rememberLauncherForActivityResult
-
-        isUploadingPhoto = true
-        statusText = "Saving photo..."
-        statusIsError = false
-
-        try {
-            val bitmap = context.contentResolver.openInputStream(selectedUri)?.use { inputStream ->
-                BitmapFactory.decodeStream(inputStream)
-            }
-
-            if (bitmap == null) {
-                isUploadingPhoto = false
-                statusText = "Unable to read the selected image."
-                statusIsError = true
-            } else {
-                localPhoto = bitmap
-
-                val encodedPhoto = encodeProfilePhoto(bitmap)
-                if (encodedPhoto.isBlank()) {
-                    isUploadingPhoto = false
-                    statusText = "Unable to process the selected image."
-                    statusIsError = true
-                } else {
-                    firestore
-                        .collection("users")
-                        .document(signedInUser.uid)
-                        .set(
-                            mapOf("photoBase64" to encodedPhoto),
-                            SetOptions.merge()
-                        )
-                        .addOnSuccessListener {
-                            profilePhotoBase64 = encodedPhoto
-                            isUploadingPhoto = false
-                            statusText = "Profile photo saved successfully."
-                            statusIsError = false
-                        }
-                        .addOnFailureListener { exception: Exception ->
-                            isUploadingPhoto = false
-                            statusText = exception.message
-                                ?: "Unable to save profile photo."
-                            statusIsError = true
-                        }
-                }
-            }
-        } catch (exception: Exception) {
-            isUploadingPhoto = false
-            statusText = exception.message ?: "Unable to process the selected photo."
-            statusIsError = true
-        }
-    }
-
-    // ---------------------------------------------------------
-    // LOAD PROFILE FROM FIRESTORE
-    // ---------------------------------------------------------
-    LaunchedEffect(signedInUser.uid) {
-        firestore
-            .collection("users")
-            .document(signedInUser.uid)
+    LaunchedEffect(user.uid) {
+        firestore.collection("users")
+            .document(user.uid)
             .get()
             .addOnSuccessListener { document ->
                 fullName = document.getString("name") ?: ""
-                emailAddress = document.getString("email") ?: (signedInUser.email ?: "")
+                email = document.getString("email") ?: (user.email ?: "")
                 college = document.getString("college") ?: ""
                 course = document.getString("course") ?: ""
                 semester = document.getString("semester") ?: ""
                 cgpa = document.getString("cgpa") ?: ""
                 skills = document.getString("skills") ?: ""
                 about = document.getString("about") ?: ""
-                profilePhotoBase64 = document.getString("photoBase64") ?: ""
-
-                if (profilePhotoBase64.isNotBlank()) {
-                    localPhoto = decodeProfilePhoto(profilePhotoBase64)
-                }
-
+                photoUrl = document.getString("photoUrl") ?: ""
                 isLoading = false
             }
-            .addOnFailureListener { exception: Exception ->
-                statusText = exception.message ?: "Unable to load your profile."
-                statusIsError = true
+            .addOnFailureListener { exception ->
+                message = exception.message ?: "Unable to load your profile."
+                messageIsError = true
                 isLoading = false
             }
+    }
+
+    // Load the saved photo on another device.
+    LaunchedEffect(photoUrl) {
+        if (photoUrl.isBlank() || localPhoto != null) return@LaunchedEffect
+        localPhoto = withContext(Dispatchers.IO) {
+            try {
+                URL(photoUrl).openStream().use { BitmapFactory.decodeStream(it) }
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 
     if (isLoading) {
@@ -3196,10 +3118,6 @@ private fun ProfileScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-
-        // -----------------------------------------------------
-        // TOP BAR
-        // -----------------------------------------------------
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -3210,9 +3128,7 @@ private fun ProfileScreen(
                 fontSize = 38.sp,
                 modifier = Modifier.clickable { onBack() }
             )
-
             Spacer(modifier = Modifier.size(10.dp))
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "MY PROFILE",
@@ -3231,9 +3147,6 @@ private fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // -----------------------------------------------------
-        // PROFILE PHOTO
-        // -----------------------------------------------------
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
@@ -3252,16 +3165,17 @@ private fun ProfileScreen(
                         modifier = Modifier
                             .size(100.dp)
                             .clip(RoundedCornerShape(50.dp))
+                            .background(Color(0xFF202027))
                     )
                 } else {
                     Box(
                         modifier = Modifier
                             .size(100.dp)
                             .background(
-                                brush = Brush.linearGradient(
+                                Brush.linearGradient(
                                     listOf(Color(0xFFB76CFF), Color(0xFF00D9FF))
                                 ),
-                                shape = RoundedCornerShape(50.dp)
+                                RoundedCornerShape(50.dp)
                             ),
                         contentAlignment = Alignment.Center
                     ) {
@@ -3276,17 +3190,18 @@ private fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                Button(
-                    onClick = { profilePhotoPicker.launch("image/*") },
-                    enabled = !isUploadingPhoto,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF8B4DFF)
-                    ),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
+                if (isEditing) {
+                    OutlinedButton(
+                        onClick = { photoPicker.launch("image/*") },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("UPLOAD PHOTO", fontWeight = FontWeight.Bold)
+                    }
+                } else {
                     Text(
-                        text = if (isUploadingPhoto) "UPLOADING..." else "UPLOAD PHOTO",
-                        fontWeight = FontWeight.Bold
+                        text = if (photoUrl.isNotBlank()) "Profile photo saved" else "No profile photo yet",
+                        color = Color(0xFF777780),
+                        fontSize = 10.sp
                     )
                 }
             }
@@ -3294,31 +3209,21 @@ private fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        if (statusText.isNotBlank()) {
-            Text(
-                text = statusText,
-                color = if (statusIsError) Color(0xFFFF7B72) else Color(0xFF65E572),
-                fontSize = 11.sp
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        // -----------------------------------------------------
-        // PERSONAL INFORMATION
-        // -----------------------------------------------------
         ProfileField(
             label = "FULL NAME",
             value = fullName,
             enabled = isEditing,
             onValueChange = { fullName = it }
         )
+        Spacer(modifier = Modifier.height(10.dp))
 
         ProfileField(
             label = "EMAIL",
-            value = emailAddress,
+            value = email,
             enabled = false,
             onValueChange = {}
         )
+        Spacer(modifier = Modifier.height(10.dp))
 
         ProfileField(
             label = "COLLEGE / UNIVERSITY",
@@ -3326,6 +3231,7 @@ private fun ProfileScreen(
             enabled = isEditing,
             onValueChange = { college = it }
         )
+        Spacer(modifier = Modifier.height(10.dp))
 
         ProfileField(
             label = "COURSE / BRANCH",
@@ -3333,6 +3239,7 @@ private fun ProfileScreen(
             enabled = isEditing,
             onValueChange = { course = it }
         )
+        Spacer(modifier = Modifier.height(10.dp))
 
         ProfileField(
             label = "SEMESTER",
@@ -3340,6 +3247,7 @@ private fun ProfileScreen(
             enabled = isEditing,
             onValueChange = { semester = it }
         )
+        Spacer(modifier = Modifier.height(10.dp))
 
         ProfileField(
             label = "CGPA",
@@ -3347,161 +3255,127 @@ private fun ProfileScreen(
             enabled = isEditing,
             onValueChange = { cgpa = it }
         )
+        Spacer(modifier = Modifier.height(10.dp))
 
         ProfileField(
             label = "SKILLS",
             value = skills,
             enabled = isEditing,
-            onValueChange = { skills = it },
-            minLines = 2
+            minLines = 2,
+            onValueChange = { skills = it }
         )
+        Spacer(modifier = Modifier.height(10.dp))
 
         ProfileField(
             label = "ABOUT YOU",
             value = about,
             enabled = isEditing,
-            onValueChange = { about = it },
-            minLines = 4
+            minLines = 4,
+            onValueChange = { about = it }
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        if (!isEditing) {
+        if (isEditing) {
             Button(
                 onClick = {
-                    isEditing = true
-                    statusText = ""
+                    if (fullName.trim().isBlank()) {
+                        message = "Please enter your full name."
+                        messageIsError = true
+                        return@Button
+                    }
+                    if (college.trim().isBlank()) {
+                        message = "Please enter your college / university."
+                        messageIsError = true
+                        return@Button
+                    }
+                    if (course.trim().isBlank()) {
+                        message = "Please enter your course / branch."
+                        messageIsError = true
+                        return@Button
+                    }
+
+                    isSaving = true
+                    message = "Saving profile..."
+                    messageIsError = false
+
+                    val profile = mapOf(
+                        "uid" to user.uid,
+                        "name" to fullName.trim(),
+                        "email" to (user.email ?: email),
+                        "college" to college.trim(),
+                        "course" to course.trim(),
+                        "semester" to semester.trim(),
+                        "cgpa" to cgpa.trim(),
+                        "skills" to skills.trim(),
+                        "about" to about.trim(),
+                        "profileCompleted" to true
+                    )
+
+                    firestore.collection("users")
+                        .document(user.uid)
+                        .set(profile, SetOptions.merge())
+                        .addOnSuccessListener {
+                            isSaving = false
+                            isEditing = false
+                            message = "Profile updated successfully."
+                            messageIsError = false
+                        }
+                        .addOnFailureListener { exception ->
+                            isSaving = false
+                            message = exception.message ?: "Unable to update your profile."
+                            messageIsError = true
+                        }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(15.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF8B4DFF)
-                )
+                enabled = !isSaving,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
+                shape = RoundedCornerShape(15.dp)
             ) {
-                Text("EDIT PROFILE", fontWeight = FontWeight.Bold)
+                Text(if (isSaving) "SAVING..." else "SAVE CHANGES", fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedButton(
+                onClick = { isEditing = false; message = "" },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isSaving
+            ) {
+                Text("CANCEL")
             }
         } else {
-            Row(
+            Button(
+                onClick = {
+                    message = ""
+                    isEditing = true
+                },
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15151B)),
+                shape = RoundedCornerShape(15.dp)
             ) {
-                OutlinedButton(
-                    onClick = {
-                        isEditing = false
-                        statusText = ""
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = !isSaving,
-                    shape = RoundedCornerShape(15.dp)
-                ) {
-                    Text("CANCEL")
-                }
-
-                Button(
-                    onClick = {
-                        if (fullName.trim().isBlank()) {
-                            statusText = "Please enter your full name."
-                            statusIsError = true
-                            return@Button
-                        }
-
-                        isSaving = true
-                        statusText = "Saving profile..."
-                        statusIsError = false
-
-                        val profileData = mapOf(
-                            "uid" to signedInUser.uid,
-                            "name" to fullName.trim(),
-                            "email" to emailAddress,
-                            "college" to college.trim(),
-                            "course" to course.trim(),
-                            "semester" to semester.trim(),
-                            "cgpa" to cgpa.trim(),
-                            "skills" to skills.trim(),
-                            "about" to about.trim(),
-                            "photoBase64" to profilePhotoBase64,
-                            "profileCompleted" to true
-                        )
-
-                        firestore
-                            .collection("users")
-                            .document(signedInUser.uid)
-                            .set(profileData, SetOptions.merge())
-                            .addOnSuccessListener {
-                                isSaving = false
-                                isEditing = false
-                                statusText = "Profile saved successfully."
-                                statusIsError = false
-                            }
-                            .addOnFailureListener { saveException: Exception ->
-                                isSaving = false
-                                statusText = saveException.message
-                                    ?: "Unable to save your profile."
-                                statusIsError = true
-                            }
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = !isSaving,
-                    shape = RoundedCornerShape(15.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF8B4DFF)
-                    )
-                ) {
-                    Text(
-                        text = if (isSaving) "SAVING..." else "SAVE CHANGES",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                Text("EDIT PROFILE", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
+
+        if (message.isNotBlank()) {
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = message,
+                color = if (messageIsError) Color(0xFFFF8A80) else Color(0xFFB9F6CA),
+                fontSize = 12.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(25.dp))
+
+        Text(
+            text = "Your profile is linked to your PRISM account, not to a single device.",
+            color = Color.Gray,
+            fontSize = 10.sp
+        )
 
         Spacer(modifier = Modifier.height(30.dp))
-    }
-}
-
-private fun encodeProfilePhoto(bitmap: Bitmap): String {
-    return try {
-        val maxSize = 400
-        val width = bitmap.width
-        val height = bitmap.height
-
-        val scale = if (width > maxSize || height > maxSize) {
-            minOf(maxSize.toFloat() / width.toFloat(), maxSize.toFloat() / height.toFloat())
-        } else {
-            1f
-        }
-
-        val resized = if (scale < 1f) {
-            Bitmap.createScaledBitmap(
-                bitmap,
-                (width * scale).toInt().coerceAtLeast(1),
-                (height * scale).toInt().coerceAtLeast(1),
-                true
-            )
-        } else {
-            bitmap
-        }
-
-        val outputStream = java.io.ByteArrayOutputStream()
-        resized.compress(Bitmap.CompressFormat.JPEG, 75, outputStream)
-        android.util.Base64.encodeToString(
-            outputStream.toByteArray(),
-            android.util.Base64.NO_WRAP
-        )
-    } catch (_: Exception) {
-        ""
-    }
-}
-
-private fun decodeProfilePhoto(base64: String): Bitmap? {
-    return try {
-        val bytes = android.util.Base64.decode(
-            base64,
-            android.util.Base64.NO_WRAP
-        )
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-    } catch (_: Exception) {
-        null
     }
 }
 
@@ -3516,15 +3390,14 @@ private fun ProfileField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp),
+        modifier = Modifier.fillMaxWidth(),
         label = { Text(label) },
         enabled = enabled,
         minLines = minLines,
         singleLine = minLines == 1
     )
 }
+
 
 // =========================================================
 // FEATURE CARD
