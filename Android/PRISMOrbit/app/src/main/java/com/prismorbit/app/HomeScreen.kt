@@ -136,6 +136,101 @@ private fun saveAcademicRecord(
         .addOnFailureListener { onError(it) }
 }
 
+// =========================================================
+// ACADEMIC EVENTS - FIRESTORE PERSISTENCE
+// =========================================================
+// Events are stored under the signed-in user's UID.
+// The UI closes the add/edit screen only after Firestore confirms success.
+
+private fun AcademicEvent.toMap(): Map<String, Any> = mapOf(
+    "id" to id,
+    "title" to title,
+    "subject" to subject,
+    "type" to type,
+    "date" to date,
+    "day" to day,
+    "syllabus" to syllabus,
+    "notes" to notes,
+    "status" to status
+)
+
+private fun documentToAcademicEvent(
+    document: com.google.firebase.firestore.DocumentSnapshot
+): AcademicEvent? {
+    val id = document.getLong("id")
+        ?: document.id.toLongOrNull()
+        ?: return null
+
+    return AcademicEvent(
+        id = id,
+        title = document.getString("title") ?: "",
+        subject = document.getString("subject") ?: "",
+        type = document.getString("type") ?: "Other",
+        date = document.getString("date") ?: "",
+        day = document.getString("day") ?: "",
+        syllabus = document.getString("syllabus") ?: "",
+        notes = document.getString("notes") ?: "",
+        status = document.getString("status") ?: "UPCOMING"
+    )
+}
+
+private fun loadAcademicEvents(
+    firestore: FirebaseFirestore,
+    uid: String,
+    onSuccess: (List<AcademicEvent>) -> Unit,
+    onError: (Exception) -> Unit
+) {
+    firestore
+        .collection("users")
+        .document(uid)
+        .collection("academicEvents")
+        .get()
+        .addOnSuccessListener { snapshot ->
+            val events = snapshot.documents
+                .mapNotNull { documentToAcademicEvent(it) }
+                .sortedBy { it.date }
+
+            onSuccess(events)
+        }
+        .addOnFailureListener { error ->
+            onError(error)
+        }
+}
+
+private fun saveAcademicEvent(
+    firestore: FirebaseFirestore,
+    uid: String,
+    event: AcademicEvent,
+    onSuccess: () -> Unit = {},
+    onError: (Exception) -> Unit = {}
+) {
+    firestore
+        .collection("users")
+        .document(uid)
+        .collection("academicEvents")
+        .document(event.id.toString())
+        .set(event.toMap())
+        .addOnSuccessListener { onSuccess() }
+        .addOnFailureListener { onError(it) }
+}
+
+private fun deleteAcademicEvent(
+    firestore: FirebaseFirestore,
+    uid: String,
+    eventId: Long,
+    onSuccess: () -> Unit = {},
+    onError: (Exception) -> Unit = {}
+) {
+    firestore
+        .collection("users")
+        .document(uid)
+        .collection("academicEvents")
+        .document(eventId.toString())
+        .delete()
+        .addOnSuccessListener { onSuccess() }
+        .addOnFailureListener { onError(it) }
+}
+
 data class AcademicEvent(
     val id: Long = System.currentTimeMillis(),
     val title: String,
@@ -154,7 +249,7 @@ data class AcademicEvent(
 // =========================================================
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(onLogout: () -> Unit = {}) {
     val auth = FirebaseAuth.getInstance()
     val firestore = FirebaseFirestore.getInstance()
     val signedInUser = auth.currentUser
@@ -195,6 +290,24 @@ fun HomeScreen() {
                     academicLoadError = error.message ?: "Unable to load academic data."
                 }
         }
+    }
+
+    LaunchedEffect(signedInUser?.uid) {
+        val uid = signedInUser?.uid ?: return@LaunchedEffect
+
+        loadAcademicEvents(
+            firestore = firestore,
+            uid = uid,
+            onSuccess = { loadedEvents ->
+                academicEvents.clear()
+                academicEvents.addAll(loadedEvents)
+                academicLoadError = ""
+            },
+            onError = { error ->
+                academicLoadError =
+                    error.message ?: "Unable to load academic events."
+            }
+        )
     }
 
     fun persistAcademicRecord(
@@ -257,19 +370,135 @@ fun HomeScreen() {
                     )
                 )
             },
-            onAddEvent = { event -> academicEvents.add(event) },
-            onUpdateEvent = { updated ->
-                val index = academicEvents.indexOfFirst { it.id == updated.id }
-                if (index >= 0) academicEvents[index] = updated
+            onAddEvent = { event, result ->
+                val uid = signedInUser?.uid
+
+                if (uid == null) {
+                    val message = "No signed-in user found."
+                    academicLoadError = message
+                    result(false, message)
+                } else {
+                    saveAcademicEvent(
+                        firestore = firestore,
+                        uid = uid,
+                        event = event,
+                        onSuccess = {
+                            academicEvents.removeAll { it.id == event.id }
+                            academicEvents.add(event)
+                            academicLoadError = ""
+                            result(true, "")
+                        },
+                        onError = { error ->
+                            val message =
+                                error.message ?: "Unable to save academic event."
+                            academicLoadError = message
+                            result(false, message)
+                        }
+                    )
+                }
             },
-            onDeleteEvent = { id -> academicEvents.removeAll { it.id == id } },
+            onUpdateEvent = { updated, result ->
+                val uid = signedInUser?.uid
+
+                if (uid == null) {
+                    val message = "No signed-in user found."
+                    academicLoadError = message
+                    result(false, message)
+                } else {
+                    saveAcademicEvent(
+                        firestore = firestore,
+                        uid = uid,
+                        event = updated,
+                        onSuccess = {
+                            val index =
+                                academicEvents.indexOfFirst { it.id == updated.id }
+
+                            if (index >= 0) {
+                                academicEvents[index] = updated
+                            } else {
+                                academicEvents.add(updated)
+                            }
+
+                            academicLoadError = ""
+                            result(true, "")
+                        },
+                        onError = { error ->
+                            val message =
+                                error.message ?: "Unable to update academic event."
+                            academicLoadError = message
+                            result(false, message)
+                        }
+                    )
+                }
+            },
+            onDeleteEvent = { id ->
+                val uid = signedInUser?.uid
+
+                if (uid == null) {
+                    academicLoadError = "No signed-in user found."
+                } else {
+                    deleteAcademicEvent(
+                        firestore = firestore,
+                        uid = uid,
+                        eventId = id,
+                        onSuccess = {
+                            academicEvents.removeAll { it.id == id }
+                            academicLoadError = ""
+                        },
+                        onError = { error ->
+                            academicLoadError =
+                                error.message ?: "Unable to delete academic event."
+                        }
+                    )
+                }
+            },
             onCompleteEvent = { id ->
+                val uid = signedInUser?.uid
                 val index = academicEvents.indexOfFirst { it.id == id }
-                if (index >= 0) academicEvents[index] = academicEvents[index].copy(status = "COMPLETED")
+
+                if (uid == null) {
+                    academicLoadError = "No signed-in user found."
+                } else if (index >= 0) {
+                    val updated = academicEvents[index].copy(status = "COMPLETED")
+
+                    saveAcademicEvent(
+                        firestore = firestore,
+                        uid = uid,
+                        event = updated,
+                        onSuccess = {
+                            academicEvents[index] = updated
+                            academicLoadError = ""
+                        },
+                        onError = { error ->
+                            academicLoadError =
+                                error.message ?: "Unable to complete academic event."
+                        }
+                    )
+                }
             },
             onCancelEvent = { id ->
+                val uid = signedInUser?.uid
                 val index = academicEvents.indexOfFirst { it.id == id }
-                if (index >= 0) academicEvents[index] = academicEvents[index].copy(status = "CANCELLED")
+
+                if (uid == null) {
+                    academicLoadError = "No signed-in user found."
+                } else if (index >= 0) {
+                    val updated = academicEvents[index].copy(status = "CANCELLED")
+
+                    saveAcademicEvent(
+                        firestore = firestore,
+                        uid = uid,
+                        event = updated,
+                        onSuccess = {
+                            academicEvents[index] = updated
+                            academicLoadError = ""
+                        },
+                        onError = { error ->
+                            academicLoadError =
+                                error.message ?: "Unable to cancel academic event."
+                        }
+                    )
+                }
             }
         )
     } else if (showCgpaScreen) {
@@ -723,8 +952,8 @@ private fun AcademicsScreen(
     onBack: () -> Unit,
     onCgpaClick: () -> Unit,
     onSaveSemesters: (List<String>) -> Unit,
-    onAddEvent: (AcademicEvent) -> Unit,
-    onUpdateEvent: (AcademicEvent) -> Unit,
+    onAddEvent: (AcademicEvent, (Boolean, String) -> Unit) -> Unit,
+    onUpdateEvent: (AcademicEvent, (Boolean, String) -> Unit) -> Unit,
     onDeleteEvent: (Long) -> Unit,
     onCompleteEvent: (Long) -> Unit,
     onCancelEvent: (Long) -> Unit
@@ -927,9 +1156,13 @@ private fun AcademicsScreen(
         AddAcademicEventScreen(
             initialEvent = null,
             onBack = { showAddEvent = false },
-            onSave = {
-                onAddEvent(it)
-                showAddEvent = false
+            onSave = { event, result ->
+                onAddEvent(event) { success, message ->
+                    result(success, message)
+                    if (success) {
+                        showAddEvent = false
+                    }
+                }
             }
         )
     }
@@ -938,9 +1171,13 @@ private fun AcademicsScreen(
         AddAcademicEventScreen(
             initialEvent = event,
             onBack = { editingEvent = null },
-            onSave = {
-                onUpdateEvent(it)
-                editingEvent = null
+            onSave = { updated, result ->
+                onUpdateEvent(updated) { success, message ->
+                    result(success, message)
+                    if (success) {
+                        editingEvent = null
+                    }
+                }
             }
         )
     }
@@ -1261,7 +1498,7 @@ private fun AcademicEventRow(
 private fun AddAcademicEventScreen(
     initialEvent: AcademicEvent?,
     onBack: () -> Unit,
-    onSave: (AcademicEvent) -> Unit
+    onSave: (AcademicEvent, (Boolean, String) -> Unit) -> Unit
 ) {
     var title by remember { mutableStateOf(initialEvent?.title ?: "") }
     var subject by remember { mutableStateOf(initialEvent?.subject ?: "") }
@@ -1270,6 +1507,7 @@ private fun AddAcademicEventScreen(
     var syllabus by remember { mutableStateOf(initialEvent?.syllabus ?: "") }
     var notes by remember { mutableStateOf(initialEvent?.notes ?: "") }
     var error by remember { mutableStateOf("") }
+    var isSaving by remember { mutableStateOf(false) }
 
     val types = listOf(
         "Assignment", "Class Test", "Viva", "Practical", "Quiz",
@@ -1402,37 +1640,58 @@ private fun AddAcademicEventScreen(
             Button(
                 onClick = {
                     val parsed = parseAcademicDate(date)
+
                     when {
-                        title.trim().isEmpty() -> error = "Please enter an event title."
-                        subject.trim().isEmpty() -> error = "Please enter the subject."
-                        parsed == null -> error = "Use a valid date in YYYY-MM-DD format."
+                        title.trim().isEmpty() -> {
+                            error = "Please enter an event title."
+                        }
+
+                        subject.trim().isEmpty() -> {
+                            error = "Please enter the subject."
+                        }
+
+                        parsed == null -> {
+                            error = "Use a valid date in YYYY-MM-DD format."
+                        }
+
                         else -> {
-                            onSave(
-                                AcademicEvent(
-                                    id = initialEvent?.id ?: System.currentTimeMillis(),
-                                    title = title.trim(),
-                                    subject = subject.trim(),
-                                    type = type,
-                                    date = date,
-                                    day = parsed.first,
-                                    syllabus = syllabus.trim(),
-                                    notes = notes.trim(),
-                                    status = when (initialEvent?.status) {
-                                        "COMPLETED" -> "COMPLETED"
-                                        "CANCELLED" -> "CANCELLED"
-                                        else -> "UPCOMING"
-                                    }
-                                )
+                            error = ""
+                            isSaving = true
+
+                            val eventToSave = AcademicEvent(
+                                id = initialEvent?.id ?: System.currentTimeMillis(),
+                                title = title.trim(),
+                                subject = subject.trim(),
+                                type = type,
+                                date = date,
+                                day = parsed.first,
+                                syllabus = syllabus.trim(),
+                                notes = notes.trim(),
+                                status = when (initialEvent?.status) {
+                                    "COMPLETED" -> "COMPLETED"
+                                    "CANCELLED" -> "CANCELLED"
+                                    else -> "UPCOMING"
+                                }
                             )
+
+                            onSave(eventToSave) { success, message ->
+                                isSaving = false
+                                if (!success) {
+                                    error = message.ifBlank {
+                                        "Unable to save the academic event."
+                                    }
+                                }
+                            }
                         }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
+                enabled = !isSaving,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
                 shape = RoundedCornerShape(15.dp)
             ) {
                 Text(
-                    if (initialEvent == null) "SAVE EVENT" else "SAVE CHANGES",
+                    if (isSaving) "SAVING..." else if (initialEvent == null) "SAVE EVENT" else "SAVE CHANGES",
                     fontWeight = FontWeight.Bold
                 )
             }
