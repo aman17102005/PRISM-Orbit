@@ -619,12 +619,7 @@ fun ProfileRouter(
             )
         }
         else -> {
-            HomeScreen(
-                onLogout = {
-                    firebaseAuth.signOut()
-
-                }
-            )
+            HomeScreen()
         }
 
     }
