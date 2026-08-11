@@ -639,6 +639,7 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     var showDsaScreen by remember { mutableStateOf(false) }
     var showProfileScreen by remember { mutableStateOf(false) }
     var showProjectsScreen by remember { mutableStateOf(false) }
+    var showInternshipScreen by remember { mutableStateOf(false) }
 
     var academicRecord by remember { mutableStateOf(AcademicRecord()) }
     var academicLoadError by remember { mutableStateOf("") }
@@ -648,6 +649,7 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     // DSA is now user-specific Firestore data. No sample/hardcoded problems.
     val dsaProblems = remember { mutableStateListOf<DSAProblem>() }
     val projects = remember { mutableStateListOf<ProjectItem>() }
+    var internshipCount by remember { mutableStateOf(0) }
     var dsaLoading by remember { mutableStateOf(false) }
     var dsaLoadError by remember { mutableStateOf("") }
 
@@ -722,6 +724,22 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
         )
     }
 
+    LaunchedEffect(signedInUser?.uid) {
+        val uid = signedInUser?.uid ?: return@LaunchedEffect
+
+        firestore
+            .collection("users")
+            .document(uid)
+            .collection("internships")
+            .get()
+            .addOnSuccessListener { snapshot ->
+                internshipCount = snapshot.size()
+            }
+            .addOnFailureListener {
+                internshipCount = 0
+            }
+    }
+
     fun persistAcademicRecord(
         updated: AcademicRecord,
         onSuccess: () -> Unit = {},
@@ -752,6 +770,14 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     if (showProfileScreen) {
         ProfileScreen(
             onBack = { showProfileScreen = false }
+        )
+    } else if (showInternshipScreen) {
+        InternshipTrackerScreen(
+            projectCount = projects.size,
+            onBack = { showInternshipScreen = false },
+            onCountChanged = { count ->
+                internshipCount = count
+            }
         )
     } else if (showProjectsScreen) {
         ProjectsScreen(
@@ -1027,7 +1053,9 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
             },
             onProfileClick = { showProfileScreen = true },
             projectCount = projects.size,
-            onProjectsClick = { showProjectsScreen = true }
+            onProjectsClick = { showProjectsScreen = true },
+            internshipCount = internshipCount,
+            onInternshipsClick = { showInternshipScreen = true }
         )
     }
 }
@@ -1045,7 +1073,9 @@ private fun DashboardScreen(
     onDsaClick: () -> Unit,
     onProfileClick: () -> Unit,
     projectCount: Int,
-    onProjectsClick: () -> Unit
+    onProjectsClick: () -> Unit,
+    internshipCount: Int,
+    onInternshipsClick: () -> Unit
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -1336,13 +1366,19 @@ private fun DashboardScreen(
                 accent = Color(0xFF65E572)
             )
 
-            FeatureCard(
-                modifier = Modifier.weight(1f),
-                title = "INTERNSHIPS",
-                value = "2",
-                subtitle = "Experience",
-                accent = Color(0xFFFFD23F)
-            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onInternshipsClick() }
+            ) {
+                FeatureCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    title = "INTERNSHIPS",
+                    value = internshipCount.toString(),
+                    subtitle = "Tap to explore",
+                    accent = Color(0xFFFFD23F)
+                )
+            }
         }
 
         Spacer(
