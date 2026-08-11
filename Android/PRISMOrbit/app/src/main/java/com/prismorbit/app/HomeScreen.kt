@@ -353,7 +353,276 @@ data class AcademicEvent(
     val status: String = "UPCOMING"
 )
 
+// =========================================================
+// PROJECTS
+// =========================================================
 
+data class ProjectTask(
+    val id: Long = System.currentTimeMillis() + kotlin.random.Random.nextLong(0, 100000),
+    val title: String,
+    val completed: Boolean = false
+)
+
+data class ProjectItem(
+    val id: Long = System.currentTimeMillis(),
+    val name: String,
+    val description: String,
+    val techStack: String,
+    val startDate: String,
+    val status: String,
+    val githubUrl: String,
+    val liveUrl: String,
+    val progress: Int,
+    val tasks: List<ProjectTask> = emptyList(),
+    val photos: List<String> = emptyList()
+)
+
+private fun ProjectItem.toMap(): Map<String, Any> = mapOf(
+    "id" to id,
+    "name" to name,
+    "description" to description,
+    "techStack" to techStack,
+    "startDate" to startDate,
+    "status" to status,
+    "githubUrl" to githubUrl,
+    "liveUrl" to liveUrl,
+    "progress" to progress,
+    "tasks" to tasks.map { task ->
+        mapOf(
+            "id" to task.id,
+            "title" to task.title,
+            "completed" to task.completed
+        )
+    },
+    "photos" to photos
+)
+
+
+private fun documentToProjectItem(
+    document: com.google.firebase.firestore.DocumentSnapshot
+): ProjectItem? {
+
+    val name = document.getString("name")
+        ?.trim()
+        .orEmpty()
+
+    if (name.isBlank()) {
+        return null
+    }
+
+    val taskList: List<ProjectTask> =
+        (document.get("tasks") as? List<*>)
+            ?.mapNotNull { rawTask ->
+
+                val taskMap =
+                    rawTask as? Map<*, *>
+                        ?: return@mapNotNull null
+
+                val title =
+                    taskMap["title"]
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
+
+                if (title.isBlank()) {
+                    return@mapNotNull null
+                }
+
+                val taskId =
+                    when (val rawId = taskMap["id"]) {
+
+                        is Number ->
+                            rawId.toLong()
+
+                        is String ->
+                            rawId.toLongOrNull()
+
+                        else ->
+                            null
+                    }
+                        ?: System.currentTimeMillis()
+
+                val completed =
+                    taskMap["completed"] as? Boolean
+                        ?: false
+
+                ProjectTask(
+                    id = taskId,
+                    title = title,
+                    completed = completed
+                )
+            }
+            ?: emptyList()
+
+
+    val photos: List<String> =
+        (document.get("photos") as? List<*>)
+            ?.mapNotNull { photo ->
+                photo?.toString()
+            }
+            ?: emptyList()
+
+
+    /*
+     * Firebase id can be:
+     * - Number  -> old project data
+     * - String  -> newer project data
+     *
+     * Never call document.getLong("id") directly,
+     * because it crashes when Firebase contains a String.
+     */
+
+    val projectId: Long =
+        when (val rawId = document.get("id")) {
+
+            is Number ->
+                rawId.toLong()
+
+            is String ->
+                rawId.toLongOrNull()
+                    ?: document.id.toLongOrNull()
+                    ?: document.id.hashCode().toLong()
+
+            else ->
+                document.id.toLongOrNull()
+                    ?: document.id.hashCode().toLong()
+        }
+
+
+    val progressValue: Int =
+        when (val rawProgress = document.get("progress")) {
+
+            is Number ->
+                rawProgress.toInt()
+
+            is String ->
+                rawProgress.toIntOrNull()
+                    ?: 0
+
+            else ->
+                0
+        }.coerceIn(0, 100)
+
+
+    return ProjectItem(
+        id = projectId,
+
+        name = name,
+
+        description =
+            document.getString("description")
+                ?: "",
+
+        techStack =
+            document.getString("techStack")
+                ?: document.getString("codingLanguage")
+                ?: "",
+
+        startDate =
+            document.getString("startDate")
+                ?: "",
+
+        status =
+            document.getString("status")
+                ?: "IDEA",
+
+        githubUrl =
+            document.getString("githubUrl")
+                ?: "",
+
+        liveUrl =
+            document.getString("liveUrl")
+                ?: "",
+
+        progress = progressValue,
+
+        tasks = taskList,
+
+        photos = photos
+    )
+}
+
+
+private fun loadProjects(
+    firestore: FirebaseFirestore,
+    uid: String,
+    onSuccess: (List<ProjectItem>) -> Unit,
+    onError: (Exception) -> Unit
+) {
+
+    firestore
+        .collection("users")
+        .document(uid)
+        .collection("projects")
+        .get()
+        .addOnSuccessListener { snapshot ->
+
+            val loadedProjects: List<ProjectItem> =
+                snapshot.documents
+                    .mapNotNull { document ->
+                        documentToProjectItem(document)
+                    }
+                    .sortedBy {
+                        it.name.lowercase()
+                    }
+
+            onSuccess(loadedProjects)
+        }
+        .addOnFailureListener { exception ->
+
+            onError(exception)
+        }
+}
+
+
+private fun saveProject(
+    firestore: FirebaseFirestore,
+    uid: String,
+    project: ProjectItem,
+    onSuccess: () -> Unit = {},
+    onError: (Exception) -> Unit = {}
+) {
+
+    firestore
+        .collection("users")
+        .document(uid)
+        .collection("projects")
+        .document(project.id.toString())
+        .set(project.toMap())
+        .addOnSuccessListener {
+
+            onSuccess()
+        }
+        .addOnFailureListener { exception ->
+
+            onError(exception)
+        }
+}
+
+
+private fun deleteProject(
+    firestore: FirebaseFirestore,
+    uid: String,
+    projectId: Long,
+    onSuccess: () -> Unit = {},
+    onError: (Exception) -> Unit = {}
+) {
+
+    firestore
+        .collection("users")
+        .document(uid)
+        .collection("projects")
+        .document(projectId.toString())
+        .delete()
+        .addOnSuccessListener {
+
+            onSuccess()
+        }
+        .addOnFailureListener { exception ->
+
+            onError(exception)
+        }
+}
 // =========================================================
 // HOME SCREEN
 // =========================================================
@@ -369,6 +638,7 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     var returnToAcademics by remember { mutableStateOf(false) }
     var showDsaScreen by remember { mutableStateOf(false) }
     var showProfileScreen by remember { mutableStateOf(false) }
+    var showProjectsScreen by remember { mutableStateOf(false) }
 
     var academicRecord by remember { mutableStateOf(AcademicRecord()) }
     var academicLoadError by remember { mutableStateOf("") }
@@ -377,6 +647,7 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
 
     // DSA is now user-specific Firestore data. No sample/hardcoded problems.
     val dsaProblems = remember { mutableStateListOf<DSAProblem>() }
+    val projects = remember { mutableStateListOf<ProjectItem>() }
     var dsaLoading by remember { mutableStateOf(false) }
     var dsaLoadError by remember { mutableStateOf("") }
 
@@ -438,6 +709,19 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
         )
     }
 
+    LaunchedEffect(signedInUser?.uid) {
+        val uid = signedInUser?.uid ?: return@LaunchedEffect
+        loadProjects(
+            firestore = firestore,
+            uid = uid,
+            onSuccess = { loaded ->
+                projects.clear()
+                projects.addAll(loaded)
+            },
+            onError = { }
+        )
+    }
+
     fun persistAcademicRecord(
         updated: AcademicRecord,
         onSuccess: () -> Unit = {},
@@ -468,6 +752,41 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     if (showProfileScreen) {
         ProfileScreen(
             onBack = { showProfileScreen = false }
+        )
+    } else if (showProjectsScreen) {
+        ProjectsScreen(
+            projects = projects,
+            onBack = { showProjectsScreen = false },
+            onAddProject = { project ->
+                val uid = signedInUser?.uid
+                if (uid != null) {
+                    saveProject(firestore, uid, project,
+                        onSuccess = { projects.add(project) },
+                        onError = { }
+                    )
+                }
+            },
+            onUpdateProject = { updated ->
+                val uid = signedInUser?.uid
+                if (uid != null) {
+                    saveProject(firestore, uid, updated,
+                        onSuccess = {
+                            val index = projects.indexOfFirst { it.id == updated.id }
+                            if (index >= 0) projects[index] = updated else projects.add(updated)
+                        },
+                        onError = { }
+                    )
+                }
+            },
+            onDeleteProject = { id ->
+                val uid = signedInUser?.uid
+                if (uid != null) {
+                    deleteProject(firestore, uid, id,
+                        onSuccess = { projects.removeAll { it.id == id } },
+                        onError = { }
+                    )
+                }
+            }
         )
     } else if (showAcademicsScreen) {
         AcademicsScreen(
@@ -706,7 +1025,9 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
                 dsaLoadError = ""
                 showDsaScreen = true
             },
-            onProfileClick = { showProfileScreen = true }
+            onProfileClick = { showProfileScreen = true },
+            projectCount = projects.size,
+            onProjectsClick = { showProjectsScreen = true }
         )
     }
 }
@@ -722,7 +1043,9 @@ private fun DashboardScreen(
     currentCgpa: String,
     onCgpaClick: () -> Unit,
     onDsaClick: () -> Unit,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    projectCount: Int,
+    onProjectsClick: () -> Unit
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -1004,10 +1327,12 @@ private fun DashboardScreen(
         ) {
 
             FeatureCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onProjectsClick() },
                 title = "PROJECTS",
-                value = "6",
-                subtitle = "Portfolio",
+                value = projectCount.toString(),
+                subtitle = "Tap to explore",
                 accent = Color(0xFF65E572)
             )
 
@@ -1881,6 +2206,288 @@ private fun parseAcademicDate(value: String): Pair<String, String>? {
     } catch (_: Exception) {
         null
     }
+}
+
+// =========================================================
+// PROJECTS SCREEN
+// =========================================================
+
+@Composable
+private fun ProjectsScreen(
+    projects: MutableList<ProjectItem>,
+    onBack: () -> Unit,
+    onAddProject: (ProjectItem) -> Unit,
+    onUpdateProject: (ProjectItem) -> Unit,
+    onDeleteProject: (Long) -> Unit
+) {
+    var showAddProject by remember { mutableStateOf(false) }
+    var editingProject by remember { mutableStateOf<ProjectItem?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF050507))
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+            Spacer(modifier = Modifier.size(10.dp))
+            Column {
+                Text("PROJECTS", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+                Text("BUILD • DOCUMENT • SHOWCASE", color = Color(0xFF65E572), fontSize = 8.sp, letterSpacing = 1.5.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        val completedProjects = projects.count { it.status == "COMPLETED" }
+        val averageProgress = if (projects.isEmpty()) 0 else projects.map { it.progress }.average().roundToInt()
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SmallStatCard(Modifier.weight(1f), "PROJECTS", projects.size.toString())
+            SmallStatCard(Modifier.weight(1f), "COMPLETED", completedProjects.toString())
+            SmallStatCard(Modifier.weight(1f), "AVG PROGRESS", "$averageProgress%")
+        }
+
+        Spacer(modifier = Modifier.height(22.dp))
+        SectionTitle("YOUR PROJECTS")
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (projects.isEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("NO PROJECTS YET", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Add your projects, tasks, links and project photos here.", color = Color(0xFF777780), fontSize = 10.sp)
+                }
+            }
+        } else {
+            projects.forEach { project ->
+                ProjectCard(
+                    project = project,
+                    onEdit = { editingProject = project },
+                    onDelete = { onDeleteProject(project.id) },
+                    onToggleTask = { taskId ->
+                        onUpdateProject(project.copy(tasks = project.tasks.map { task ->
+                            if (task.id == taskId) task.copy(completed = !task.completed) else task
+                        }))
+                    }
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+        Button(
+            onClick = { showAddProject = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF65A96B)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text("+  ADD PROJECT", fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(25.dp))
+    }
+
+    if (showAddProject) {
+        ProjectEditorScreen(
+            initialProject = null,
+            onBack = { showAddProject = false },
+            onSave = { onAddProject(it); showAddProject = false }
+        )
+    }
+
+    editingProject?.let { project ->
+        ProjectEditorScreen(
+            initialProject = project,
+            onBack = { editingProject = null },
+            onSave = { onUpdateProject(it); editingProject = null }
+        )
+    }
+}
+
+@Composable
+private fun ProjectCard(
+    project: ProjectItem,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onToggleTask: (Long) -> Unit
+) {
+    val completedTasks = project.tasks.count { it.completed }
+    val taskTotal = project.tasks.size
+    val statusColor = when (project.status) {
+        "COMPLETED" -> Color(0xFF65E572)
+        "ARCHIVED" -> Color(0xFF777780)
+        "PLANNING" -> Color(0xFFFFD23F)
+        "ONGOING" -> Color(0xFF00D9FF)
+        else -> Color(0xFFB76CFF)
+    }
+
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+        Column(modifier = Modifier.padding(17.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(project.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(project.status, color = statusColor, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                }
+                Text("${project.progress}%", color = statusColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+
+            if (project.description.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(project.description, color = Color(0xFF888891), fontSize = 10.sp, lineHeight = 15.sp)
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            ProgressBar(project.progress / 100f)
+            Spacer(modifier = Modifier.height(10.dp))
+            Text("Tech: ${project.techStack.ifBlank { "Not added" }}", color = Color(0xFFB76CFF), fontSize = 9.sp)
+            Text("Started: ${project.startDate.ifBlank { "Not added" }}", color = Color(0xFF777780), fontSize = 9.sp)
+            Text("Tasks: $completedTasks / $taskTotal", color = Color(0xFF777780), fontSize = 9.sp)
+
+            if (project.tasks.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                project.tasks.forEach { task ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { onToggleTask(task.id) }.padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(if (task.completed) "☑" else "☐", color = if (task.completed) Color(0xFF65E572) else Color(0xFF777780), fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(7.dp))
+                        Text(task.title, color = if (task.completed) Color(0xFF777780) else Color.White, fontSize = 9.sp)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("EDIT", fontSize = 9.sp) }
+                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("DELETE", fontSize = 9.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectEditorScreen(
+    initialProject: ProjectItem?,
+    onBack: () -> Unit,
+    onSave: (ProjectItem) -> Unit
+) {
+    var name by remember { mutableStateOf(initialProject?.name ?: "") }
+    var description by remember { mutableStateOf(initialProject?.description ?: "") }
+    var techStack by remember { mutableStateOf(initialProject?.techStack ?: "") }
+    var startDate by remember { mutableStateOf(initialProject?.startDate ?: "") }
+    var status by remember { mutableStateOf(initialProject?.status ?: "IDEA") }
+    var githubUrl by remember { mutableStateOf(initialProject?.githubUrl ?: "") }
+    var liveUrl by remember { mutableStateOf(initialProject?.liveUrl ?: "") }
+    var progressText by remember { mutableStateOf(initialProject?.progress?.toString() ?: "0") }
+    var taskText by remember { mutableStateOf(initialProject?.tasks?.joinToString("\n") { it.title } ?: "") }
+    var error by remember { mutableStateOf("") }
+
+    // Project status is intentionally a real selectable list, not a hardcoded single option.
+    val statuses = listOf("IDEA", "PLANNING", "ONGOING", "COMPLETED", "ARCHIVED")
+    val progress = progressText.toIntOrNull()?.coerceIn(0, 100) ?: 0
+
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF050507))) {
+        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+                Spacer(modifier = Modifier.size(10.dp))
+                Column {
+                    Text(if (initialProject == null) "ADD PROJECT" else "EDIT PROJECT", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text("PROJECT PORTFOLIO", color = Color(0xFF65E572), fontSize = 8.sp, letterSpacing = 1.5.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            OutlinedTextField(name, { name = it; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("Project Name") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(description, { description = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, minLines = 3)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(techStack, { techStack = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Tech Stack") }, placeholder = { Text("Kotlin, Compose, Firebase...") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(startDate, { startDate = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Start Date") }, placeholder = { Text("DD/MM/YYYY") }, singleLine = true)
+
+            Spacer(modifier = Modifier.height(16.dp))
+            SectionTitle("STATUS")
+            Spacer(modifier = Modifier.height(8.dp))
+            statuses.forEach { option ->
+                ChoiceButton(option, status == option) { status = option }
+                Spacer(modifier = Modifier.height(7.dp))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(githubUrl, { githubUrl = it }, modifier = Modifier.fillMaxWidth(), label = { Text("GitHub URL") }, singleLine = true)
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(liveUrl, { liveUrl = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Live Demo URL") }, singleLine = true)
+
+            Spacer(modifier = Modifier.height(16.dp))
+            SectionTitle("PROGRESS")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(progressText, { progressText = it.filter(Char::isDigit).take(3) }, modifier = Modifier.fillMaxWidth(), label = { Text("Progress (0–100)") }, singleLine = true)
+            Spacer(modifier = Modifier.height(8.dp))
+            ProgressBar(progress / 100f)
+
+            Spacer(modifier = Modifier.height(18.dp))
+            SectionTitle("TASKS")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(taskText, { taskText = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Tasks — one per line") }, placeholder = { Text("Design UI\nBuild backend\nTesting\nDeploy") }, minLines = 4)
+
+            if (error.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(error, color = Color(0xFFFF6B6B), fontSize = 10.sp)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Button(
+                onClick = {
+                    if (name.trim().isEmpty()) {
+                        error = "Please enter a project name."
+                    } else {
+                        val tasks = taskText.lines().map { it.trim() }.filter { it.isNotEmpty() }.mapIndexed { index, title ->
+                            val old = initialProject?.tasks?.getOrNull(index)
+                            ProjectTask(id = old?.id ?: (System.currentTimeMillis() + index), title = title, completed = old?.completed ?: false)
+                        }
+                        onSave(
+                            ProjectItem(
+                                id = initialProject?.id ?: System.currentTimeMillis(),
+                                name = name.trim(),
+                                description = description.trim(),
+                                techStack = techStack.trim(),
+                                startDate = startDate.trim(),
+                                status = status,
+                                githubUrl = githubUrl.trim(),
+                                liveUrl = liveUrl.trim(),
+                                progress = progress,
+                                tasks = tasks
+                            )
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF65A96B)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("SAVE PROJECT", fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(30.dp))
+        }
+    }
+}
+
+private fun calculatePortfolioScore(projects: List<ProjectItem>): Int {
+    if (projects.isEmpty()) return 0
+    val averageProgress = projects.map { it.progress }.average()
+    val completionScore = projects.count { it.status == "COMPLETED" }.toFloat() / projects.size * 20f
+    val techScore = projects.count { it.techStack.isNotBlank() }.toFloat() / projects.size * 15f
+    val githubScore = projects.count { it.githubUrl.isNotBlank() }.toFloat() / projects.size * 15f
+    val liveScore = projects.count { it.liveUrl.isNotBlank() }.toFloat() / projects.size * 15f
+    val taskScore = projects.count { it.tasks.isNotEmpty() }.toFloat() / projects.size * 5f
+    val progressScore = averageProgress * 0.30f
+    return (completionScore + techScore + githubScore + liveScore + taskScore + progressScore).roundToInt().coerceIn(0, 100)
 }
 
 // =========================================================
