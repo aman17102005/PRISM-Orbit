@@ -639,9 +639,13 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     var showDsaScreen by remember { mutableStateOf(false) }
     var showProfileScreen by remember { mutableStateOf(false) }
     var showProjectsScreen by remember { mutableStateOf(false) }
-    var showInternshipScreen by remember { mutableStateOf(false) }
+    var showInternshipsScreen by remember { mutableStateOf(false) }
     var showPlacementScreen by remember { mutableStateOf(false) }
+    var showGrowthScreen by remember { mutableStateOf(false) }
+
+    var internshipCount by remember { mutableStateOf(0) }
     var placementReadiness by remember { mutableStateOf<Int?>(null) }
+    var growthScore by remember { mutableStateOf<Int?>(null) }
 
     var academicRecord by remember { mutableStateOf(AcademicRecord()) }
     var academicLoadError by remember { mutableStateOf("") }
@@ -651,7 +655,6 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     // DSA is now user-specific Firestore data. No sample/hardcoded problems.
     val dsaProblems = remember { mutableStateListOf<DSAProblem>() }
     val projects = remember { mutableStateListOf<ProjectItem>() }
-    var internshipCount by remember { mutableStateOf(0) }
     var dsaLoading by remember { mutableStateOf(false) }
     var dsaLoadError by remember { mutableStateOf("") }
 
@@ -729,17 +732,20 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     LaunchedEffect(signedInUser?.uid) {
         val uid = signedInUser?.uid ?: return@LaunchedEffect
 
-        firestore
-            .collection("users")
-            .document(uid)
-            .collection("internships")
-            .get()
-            .addOnSuccessListener { snapshot ->
-                internshipCount = snapshot.size()
-            }
-            .addOnFailureListener {
+        loadGrowthDashboardSummary(
+            firestore = firestore,
+            uid = uid,
+            onSuccess = { summary ->
+                growthScore = summary.growthScore
+                placementReadiness = summary.placementScore
+                internshipCount = summary.internshipCount
+            },
+            onError = {
+                growthScore = null
+                placementReadiness = null
                 internshipCount = 0
             }
+        )
     }
 
     fun persistAcademicRecord(
@@ -773,20 +779,18 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
         ProfileScreen(
             onBack = { showProfileScreen = false }
         )
-    } else if (showPlacementScreen) {
-        PlacementTrackerScreen(
-            onBack = { showPlacementScreen = false },
-            onReadinessChanged = { score ->
-                placementReadiness = score
-            }
-        )
-    } else if (showInternshipScreen) {
+    } else if (showInternshipsScreen) {
         InternshipTrackerScreen(
             projectCount = projects.size,
-            onBack = { showInternshipScreen = false },
+            onBack = { showInternshipsScreen = false },
             onCountChanged = { count ->
                 internshipCount = count
             }
+        )
+    } else if (showPlacementScreen) {
+        PlacementTrackerScreen(
+            onBack = { showPlacementScreen = false },
+            onReadinessChanged = { }
         )
     } else if (showProjectsScreen) {
         ProjectsScreen(
@@ -825,8 +829,8 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
         )
     } else if (showAcademicsScreen) {
         AcademicsScreen(
-            currentCgpa = academicRecord.currentCgpa.toFloatOrNull() ?: 8.7f,
-            targetCgpa = academicRecord.targetCgpa.toFloatOrNull() ?: 9.0f,
+            currentCgpa = academicRecord.currentCgpa.toFloatOrNull() ?: 0f,
+            targetCgpa = academicRecord.targetCgpa.toFloatOrNull() ?: 0f,
             semesterValues = listOf(
                 academicRecord.sem1, academicRecord.sem2, academicRecord.sem3, academicRecord.sem4,
                 academicRecord.sem5, academicRecord.sem6, academicRecord.sem7, academicRecord.sem8
@@ -1051,6 +1055,13 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
                 }
             }
         )
+    } else if (showGrowthScreen) {
+        GrowthTrackerScreen(
+            onBack = { showGrowthScreen = false },
+            onGrowthChanged = { score ->
+                growthScore = score
+            }
+        )
     } else {
         DashboardScreen(
             dsaProblems = dsaProblems,
@@ -1064,9 +1075,11 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
             projectCount = projects.size,
             onProjectsClick = { showProjectsScreen = true },
             internshipCount = internshipCount,
-            onInternshipsClick = { showInternshipScreen = true },
+            onInternshipsClick = { showInternshipsScreen = true },
+            onPlacementClick = { showPlacementScreen = true },
+            growthScore = growthScore,
             placementReadiness = placementReadiness,
-            onPlacementClick = { showPlacementScreen = true }
+            onGrowthClick = { showGrowthScreen = true }
         )
     }
 }
@@ -1087,8 +1100,10 @@ private fun DashboardScreen(
     onProjectsClick: () -> Unit,
     internshipCount: Int,
     onInternshipsClick: () -> Unit,
+    onPlacementClick: () -> Unit,
+    growthScore: Int?,
     placementReadiness: Int?,
-    onPlacementClick: () -> Unit
+    onGrowthClick: () -> Unit
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -1379,19 +1394,15 @@ private fun DashboardScreen(
                 accent = Color(0xFF65E572)
             )
 
-            Box(
+            FeatureCard(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable { onInternshipsClick() }
-            ) {
-                FeatureCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = "INTERNSHIPS",
-                    value = internshipCount.toString(),
-                    subtitle = "Tap to explore",
-                    accent = Color(0xFFFFD23F)
-                )
-            }
+                    .clickable { onInternshipsClick() },
+                title = "INTERNSHIPS",
+                value = internshipCount.toString(),
+                subtitle = "Experience",
+                accent = Color(0xFFFFD23F)
+            )
         }
 
         Spacer(
@@ -1413,14 +1424,16 @@ private fun DashboardScreen(
                     .clickable { onPlacementClick() },
                 title = "PLACEMENT",
                 value = placementReadiness?.let { "$it%" } ?: "—",
-                subtitle = "Tap to view",
+                subtitle = "Readiness",
                 accent = Color(0xFFFF7B72)
             )
 
             FeatureCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onGrowthClick() },
                 title = "GROWTH",
-                value = "81%",
+                value = growthScore?.let { "$it%" } ?: "Tap",
                 subtitle = "Development",
                 accent = Color(0xFFFF4FD8)
             )
