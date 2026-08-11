@@ -640,6 +640,8 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     var showProfileScreen by remember { mutableStateOf(false) }
     var showProjectsScreen by remember { mutableStateOf(false) }
     var showInternshipScreen by remember { mutableStateOf(false) }
+    var showPlacementScreen by remember { mutableStateOf(false) }
+    var placementReadiness by remember { mutableStateOf<Int?>(null) }
 
     var academicRecord by remember { mutableStateOf(AcademicRecord()) }
     var academicLoadError by remember { mutableStateOf("") }
@@ -770,6 +772,13 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     if (showProfileScreen) {
         ProfileScreen(
             onBack = { showProfileScreen = false }
+        )
+    } else if (showPlacementScreen) {
+        PlacementTrackerScreen(
+            onBack = { showPlacementScreen = false },
+            onReadinessChanged = { score ->
+                placementReadiness = score
+            }
         )
     } else if (showInternshipScreen) {
         InternshipTrackerScreen(
@@ -1055,7 +1064,9 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
             projectCount = projects.size,
             onProjectsClick = { showProjectsScreen = true },
             internshipCount = internshipCount,
-            onInternshipsClick = { showInternshipScreen = true }
+            onInternshipsClick = { showInternshipScreen = true },
+            placementReadiness = placementReadiness,
+            onPlacementClick = { showPlacementScreen = true }
         )
     }
 }
@@ -1075,7 +1086,9 @@ private fun DashboardScreen(
     projectCount: Int,
     onProjectsClick: () -> Unit,
     internshipCount: Int,
-    onInternshipsClick: () -> Unit
+    onInternshipsClick: () -> Unit,
+    placementReadiness: Int?,
+    onPlacementClick: () -> Unit
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -1395,10 +1408,12 @@ private fun DashboardScreen(
         ) {
 
             FeatureCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onPlacementClick() },
                 title = "PLACEMENT",
-                value = "68%",
-                subtitle = "Readiness",
+                value = placementReadiness?.let { "$it%" } ?: "—",
+                subtitle = "Tap to view",
                 accent = Color(0xFFFF7B72)
             )
 
