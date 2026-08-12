@@ -24,6 +24,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -48,6 +50,14 @@ import com.prismorbit.app.ui.theme.PRISMOrbitTheme
 import kotlinx.coroutines.delay
 
 // ============================================================================
+// APP APPEARANCE STATE
+// ============================================================================
+
+object PrismAppearanceState {
+    var mode by mutableStateOf("SYSTEM")
+}
+
+// ============================================================================
 // MAIN ACTIVITY
 // ============================================================================
 
@@ -65,43 +75,70 @@ class MainActivity : ComponentActivity() {
         setContent {
             PRISMOrbitTheme {
 
-                var showOpeningScreen by remember {
-                    mutableStateOf(true)
+                val appearanceMode = PrismAppearanceState.mode
+                val useDarkTheme = when (appearanceMode) {
+                    "DARK" -> true
+                    "LIGHT" -> false
+                    else -> androidx.compose.foundation.isSystemInDarkTheme()
                 }
 
-                var userIsAuthenticated by remember {
-                    mutableStateOf(
-                        firebaseAuth.currentUser?.isEmailVerified == true
-                    )
+                LaunchedEffect(firebaseAuth.currentUser?.uid) {
+                    val uid = firebaseAuth.currentUser?.uid ?: return@LaunchedEffect
+                    firestore.collection("users").document(uid).get()
+                        .addOnSuccessListener { document ->
+                            val settings = document.get("settings") as? Map<*, *>
+                            PrismAppearanceState.mode =
+                                settings?.get("appearance")?.toString() ?: "SYSTEM"
+                        }
                 }
 
-                if (showOpeningScreen) {
+                MaterialTheme(
+                    colorScheme = if (useDarkTheme) {
+                        darkColorScheme()
+                    } else {
+                        lightColorScheme()
+                    }
+                ) {
 
-                    OpeningScreen(
-                        onFinished = {
-                            showOpeningScreen = false
-                        }
-                    )
+                    var showOpeningScreen by remember {
+                        mutableStateOf(true)
+                    }
 
-                } else if (userIsAuthenticated) {
+                    var userIsAuthenticated by remember {
+                        mutableStateOf(
+                            firebaseAuth.currentUser?.isEmailVerified == true
+                        )
+                    }
 
-                    ProfileRouter(
-                        firebaseAuth = firebaseAuth,
-                        firestore = firestore,
-                        onLogout = {
-                            firebaseAuth.signOut()
-                            userIsAuthenticated = false
-                        }
-                    )
+                    if (showOpeningScreen) {
 
-                } else {
+                        OpeningScreen(
+                            onFinished = {
+                                showOpeningScreen = false
+                            }
+                        )
 
-                    AuthenticationScreen(
-                        firebaseAuth = firebaseAuth,
-                        onAuthenticationSuccess = {
-                            userIsAuthenticated = true
-                        }
-                    )
+                    } else if (userIsAuthenticated) {
+
+                        ProfileRouter(
+                            firebaseAuth = firebaseAuth,
+                            firestore = firestore,
+                            onLogout = {
+                                firebaseAuth.signOut()
+                                PrismAppearanceState.mode = "SYSTEM"
+                                userIsAuthenticated = false
+                            }
+                        )
+
+                    } else {
+
+                        AuthenticationScreen(
+                            firebaseAuth = firebaseAuth,
+                            onAuthenticationSuccess = {
+                                userIsAuthenticated = true
+                            }
+                        )
+                    }
                 }
             }
         }
