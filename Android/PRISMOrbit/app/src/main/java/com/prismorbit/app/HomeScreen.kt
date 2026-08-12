@@ -642,6 +642,8 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     var showInternshipsScreen by remember { mutableStateOf(false) }
     var showPlacementScreen by remember { mutableStateOf(false) }
     var showGrowthScreen by remember { mutableStateOf(false) }
+    var showSettingsScreen by remember { mutableStateOf(false) }
+    var userFirstName by remember { mutableStateOf("") }
 
     var internshipCount by remember { mutableStateOf(0) }
     var placementReadiness by remember { mutableStateOf<Int?>(null) }
@@ -667,6 +669,15 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
                 .get()
                 .addOnSuccessListener { document ->
                     academicRecord = loadAcademicRecord(document)
+                    val fullName = document
+                        .getString("name")
+                        ?.trim()
+                        .orEmpty()
+
+                    userFirstName = fullName
+                        .split(Regex("\\s+"))
+                        .firstOrNull()
+                        .orEmpty()
                     academicLoadError = ""
                 }
                 .addOnFailureListener { error ->
@@ -775,7 +786,12 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
         )
     }
 
-    if (showProfileScreen) {
+    if (showSettingsScreen) {
+        SettingsScreen(
+            onBack = { showSettingsScreen = false },
+            onLogout = onLogout
+        )
+    } else if (showProfileScreen) {
         ProfileScreen(
             onBack = { showProfileScreen = false }
         )
@@ -1072,6 +1088,7 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
                 showDsaScreen = true
             },
             onProfileClick = { showProfileScreen = true },
+            userFirstName = userFirstName,
             projectCount = projects.size,
             onProjectsClick = { showProjectsScreen = true },
             internshipCount = internshipCount,
@@ -1079,7 +1096,8 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
             onPlacementClick = { showPlacementScreen = true },
             growthScore = growthScore,
             placementReadiness = placementReadiness,
-            onGrowthClick = { showGrowthScreen = true }
+            onGrowthClick = { showGrowthScreen = true },
+            onSettingsClick = { showSettingsScreen = true }
         )
     }
 }
@@ -1093,6 +1111,7 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
 private fun DashboardScreen(
     dsaProblems: List<DSAProblem>,
     currentCgpa: String,
+    userFirstName: String,
     onCgpaClick: () -> Unit,
     onDsaClick: () -> Unit,
     onProfileClick: () -> Unit,
@@ -1103,7 +1122,8 @@ private fun DashboardScreen(
     onPlacementClick: () -> Unit,
     growthScore: Int?,
     placementReadiness: Int?,
-    onGrowthClick: () -> Unit
+    onGrowthClick: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -1168,7 +1188,7 @@ private fun DashboardScreen(
             ) {
 
                 Text(
-                    text = "A",
+                    text = userFirstName,
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
@@ -1185,7 +1205,11 @@ private fun DashboardScreen(
         // =====================================================
 
         Text(
-            text = "Welcome back, Aman.",
+            text = if (userFirstName.isBlank()) {
+                "Welcome back."
+            } else {
+                "Welcome back, $userFirstName."
+            },
             color = Color.White,
             fontSize = 25.sp,
             fontWeight = FontWeight.SemiBold
@@ -1416,11 +1440,58 @@ private fun DashboardScreen(
         }
 
         Spacer(
+            modifier = Modifier.height(16.dp)
+        )
+
+        // =====================================================
+        // SETTINGS
+        // =====================================================
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onSettingsClick() },
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF111116)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "⚙  SETTINGS",
+                        color = Color(0xFFB76CFF),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(modifier = Modifier.height(5.dp))
+                    Text(
+                        text = "Account, preferences & security",
+                        color = Color.White,
+                        fontSize = 13.sp
+                    )
+                }
+
+                Text(
+                    text = "›",
+                    color = Color.White,
+                    fontSize = 28.sp
+                )
+            }
+        }
+
+        Spacer(
             modifier = Modifier.height(25.dp)
         )
     }
 }
-
 
 
 // =========================================================
