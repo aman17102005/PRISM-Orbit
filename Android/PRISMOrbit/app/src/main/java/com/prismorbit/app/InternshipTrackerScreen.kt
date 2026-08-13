@@ -1,6 +1,7 @@
 package com.prismorbit.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -64,14 +66,28 @@ data class InternshipRecord(
 )
 
 private val internshipStatuses = listOf(
-    "INTERESTED", "APPLIED", "ASSESSMENT", "INTERVIEW",
-    "SELECTED", "REJECTED", "WITHDRAWN"
+    "INTERESTED",
+    "APPLIED",
+    "ASSESSMENT",
+    "INTERVIEW",
+    "SELECTED",
+    "REJECTED",
+    "WITHDRAWN"
 )
 
-private val internshipPriorities = listOf("HIGH", "MEDIUM", "LOW")
+private val internshipPriorities = listOf(
+    "HIGH",
+    "MEDIUM",
+    "LOW"
+)
 
-private fun internshipCollection(firestore: FirebaseFirestore, uid: String) =
-    firestore.collection("users").document(uid).collection("internships")
+private fun internshipCollection(
+    firestore: FirebaseFirestore,
+    uid: String
+) = firestore
+    .collection("users")
+    .document(uid)
+    .collection("internships")
 
 private fun InternshipRecord.toFirestoreMap(): Map<String, Any> = mapOf(
     "id" to id,
@@ -95,28 +111,32 @@ private fun documentToInternshipRecord(
     document: com.google.firebase.firestore.DocumentSnapshot
 ): InternshipRecord? {
     val data = document.data ?: return null
-    val company = data["company"]?.toString().orEmpty()
-    if (company.isBlank()) return null
 
     return InternshipRecord(
         id = data["id"]?.toString()?.ifBlank { document.id } ?: document.id,
-        company = company,
+        company = data["company"]?.toString().orEmpty(),
         role = data["role"]?.toString().orEmpty(),
         location = data["location"]?.toString().orEmpty(),
         applicationDate = data["applicationDate"]?.toString().orEmpty(),
         interviewDate = data["interviewDate"]?.toString().orEmpty(),
         offerDate = data["offerDate"]?.toString().orEmpty(),
         stipend = data["stipend"]?.toString().orEmpty(),
-        status = data["status"]?.toString()?.uppercase()
-            ?.takeIf { it in internshipStatuses } ?: "INTERESTED",
+        status = data["status"]?.toString()
+            ?.uppercase()
+            ?.takeIf { it in internshipStatuses }
+            ?: "INTERESTED",
         jobUrl = data["jobUrl"]?.toString().orEmpty(),
         notes = data["notes"]?.toString().orEmpty(),
         followUpDate = data["followUpDate"]?.toString().orEmpty(),
-        priority = data["priority"]?.toString()?.uppercase()
-            ?.takeIf { it in internshipPriorities } ?: "MEDIUM",
-        createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
-        updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
-    )
+        priority = data["priority"]?.toString()
+            ?.uppercase()
+            ?.takeIf { it in internshipPriorities }
+            ?: "MEDIUM",
+        createdAt = (data["createdAt"] as? Number)?.toLong()
+            ?: System.currentTimeMillis(),
+        updatedAt = (data["updatedAt"] as? Number)?.toLong()
+            ?: System.currentTimeMillis()
+    ).takeIf { it.company.isNotBlank() }
 }
 
 private fun loadInternships(
@@ -125,16 +145,22 @@ private fun loadInternships(
     onSuccess: (List<InternshipRecord>) -> Unit,
     onError: (Exception) -> Unit
 ) {
-    internshipCollection(firestore, uid).get()
+    internshipCollection(firestore, uid)
+        .get()
         .addOnSuccessListener { snapshot ->
-            onSuccess(
-                snapshot.documents.mapNotNull(::documentToInternshipRecord)
-                    .sortedWith(
-                        compareBy<InternshipRecord> { it.followUpDate.isBlank() }
-                            .thenBy { it.followUpDate }
-                            .thenByDescending { it.updatedAt }
-                    )
-            )
+            val loaded = snapshot.documents
+                .mapNotNull(::documentToInternshipRecord)
+                .sortedWith(
+                    compareBy<InternshipRecord> {
+                        it.followUpDate.isBlank()
+                    }.thenBy {
+                        it.followUpDate
+                    }.thenByDescending {
+                        it.updatedAt
+                    }
+                )
+
+            onSuccess(loaded)
         }
         .addOnFailureListener(onError)
 }
@@ -146,7 +172,8 @@ private fun saveInternship(
     onSuccess: () -> Unit,
     onError: (Exception) -> Unit
 ) {
-    internshipCollection(firestore, uid).document(internship.id)
+    internshipCollection(firestore, uid)
+        .document(internship.id)
         .set(internship.toFirestoreMap(), SetOptions.merge())
         .addOnSuccessListener { onSuccess() }
         .addOnFailureListener(onError)
@@ -159,7 +186,9 @@ private fun deleteInternship(
     onSuccess: () -> Unit,
     onError: (Exception) -> Unit
 ) {
-    internshipCollection(firestore, uid).document(internshipId).delete()
+    internshipCollection(firestore, uid)
+        .document(internshipId)
+        .delete()
         .addOnSuccessListener { onSuccess() }
         .addOnFailureListener(onError)
 }
@@ -175,69 +204,97 @@ fun InternshipTrackerScreen(
     val currentUser = auth.currentUser
 
     var internships by remember { mutableStateOf<List<InternshipRecord>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var saving by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf("") }
+    var editorProject by remember { mutableStateOf<InternshipRecord?>(null) }
     var showEditor by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<InternshipRecord?>(null) }
     var deleting by remember { mutableStateOf<InternshipRecord?>(null) }
+    var saving by remember { mutableStateOf(false) }
 
     fun refresh() {
         val uid = currentUser?.uid
         if (uid == null) {
-            loading = false
+            isLoading = false
             errorMessage = "No signed-in user found."
             return
         }
-        loading = true
+
+        isLoading = true
         errorMessage = ""
+
         loadInternships(
-            firestore,
-            uid,
+            firestore = firestore,
+            uid = uid,
             onSuccess = {
                 internships = it
-                loading = false
+                isLoading = false
                 onCountChanged(it.size)
             },
             onError = {
-                loading = false
+                isLoading = false
                 errorMessage = it.message ?: "Unable to load internships."
             }
         )
     }
 
-    LaunchedEffect(currentUser?.uid) { refresh() }
+    LaunchedEffect(currentUser?.uid) {
+        refresh()
+    }
 
     val selected = internships.count { it.status == "SELECTED" }
     val rejected = internships.count { it.status == "REJECTED" }
-    val interviews = internships.count { it.status == "INTERVIEW" || it.status == "SELECTED" }
+    val interviews = internships.count {
+        it.status == "INTERVIEW" || it.status == "SELECTED"
+    }
     val active = internships.count {
-        it.status == "INTERESTED" || it.status == "APPLIED" ||
-                it.status == "ASSESSMENT" || it.status == "INTERVIEW"
+        it.status == "INTERESTED" ||
+                it.status == "APPLIED" ||
+                it.status == "ASSESSMENT" ||
+                it.status == "INTERVIEW"
     }
     val decided = selected + rejected
     val successRate = if (decided == 0) 0
-    else (selected.toFloat() / decided * 100f).roundToInt()
-    val profileStrength = calculateInternshipProfileStrength(internships, projectCount)
+    else (selected.toFloat() / decided.toFloat() * 100f).roundToInt()
 
-    Box(Modifier.fillMaxSize().background(Color(0xFF050507))) {
+    val profileStrength = calculateInternshipProfileStrength(
+        internships = internships,
+        projectCount = projectCount
+    )
+
+    val upcomingFollowUps = internships
+        .filter { it.followUpDate.isNotBlank() }
+        .sortedBy { it.followUpDate }
+        .take(5)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         if (showEditor) {
             InternshipEditor(
-                initial = editing,
+                initial = editorProject,
                 saving = saving,
-                onBack = { if (!saving) { showEditor = false; editing = null } },
+                onBack = {
+                    if (!saving) {
+                        showEditor = false
+                        editorProject = null
+                    }
+                },
                 onSave = { candidate ->
                     val uid = currentUser?.uid
                     if (uid == null) {
                         errorMessage = "No signed-in user found."
                         return@InternshipEditor
                     }
+
                     saving = true
                     errorMessage = ""
+
                     saveInternship(
-                        firestore,
-                        uid,
-                        candidate.copy(
+                        firestore = firestore,
+                        uid = uid,
+                        internship = candidate.copy(
                             company = candidate.company.trim(),
                             role = candidate.role.trim(),
                             location = candidate.location.trim(),
@@ -253,7 +310,7 @@ fun InternshipTrackerScreen(
                         onSuccess = {
                             saving = false
                             showEditor = false
-                            editing = null
+                            editorProject = null
                             refresh()
                         },
                         onError = {
@@ -265,91 +322,191 @@ fun InternshipTrackerScreen(
             )
         } else {
             LazyColumn(
-                Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 40.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = 18.dp,
+                    bottom = 40.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         TextButton(onClick = onBack) {
-                            Text("‹", color = Color.White, fontSize = 34.sp)
+                            Text("‹", color = MaterialTheme.colorScheme.onSurface, fontSize = 34.sp)
                         }
+
                         Column(Modifier.weight(1f)) {
-                            Text("INTERNSHIPS", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
-                            Text("APPLY • INTERVIEW • GROW", color = Color(0xFFFFD23F), fontSize = 8.sp, letterSpacing = 1.7.sp)
+                            Text(
+                                "INTERNSHIPS",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 25.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "APPLY • INTERVIEW • GROW",
+                                color = Color(0xFFFFD23F),
+                                fontSize = 8.sp,
+                                letterSpacing = 1.7.sp
+                            )
                         }
-                        Button(
+
+                        TextButton(
                             onClick = {
-                                editing = null
+                                editorProject = null
                                 errorMessage = ""
                                 showEditor = true
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB28A2E)),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                            }
                         ) {
-                            Text("+ ADD", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(
+                                "+ ADD",
+                                color = Color(0xFFFFD23F),
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
 
                 if (errorMessage.isNotBlank()) {
                     item {
-                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF241416))) {
-                            Text(errorMessage, color = Color(0xFFFF6B6B), modifier = Modifier.padding(15.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFF241416)
+                            )
+                        ) {
+                            Text(
+                                errorMessage,
+                                color = Color(0xFFFF6B6B),
+                                modifier = Modifier.padding(15.dp)
+                            )
                         }
                     }
                 }
 
-                if (loading) {
+                if (isLoading) {
                     item {
-                        Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
                             CircularProgressIndicator()
                         }
                     }
                 } else {
-                    item { InternshipProfileCard(profileStrength) }
                     item {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StatCard(Modifier.weight(1f), "APPLICATIONS", internships.size.toString())
-                            StatCard(Modifier.weight(1f), "ACTIVE", active.toString())
-                            StatCard(Modifier.weight(1f), "INTERVIEWS", interviews.toString())
+                        InternshipProfileCard(profileStrength)
+                    }
+
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            StatCard(
+                                Modifier.weight(1f),
+                                "APPLICATIONS",
+                                internships.size.toString()
+                            )
+                            StatCard(
+                                Modifier.weight(1f),
+                                "ACTIVE",
+                                active.toString()
+                            )
+                            StatCard(
+                                Modifier.weight(1f),
+                                "INTERVIEWS",
+                                interviews.toString()
+                            )
                         }
                     }
+
                     item {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StatCard(Modifier.weight(1f), "SELECTED", selected.toString())
-                            StatCard(Modifier.weight(1f), "REJECTED", rejected.toString())
-                            StatCard(Modifier.weight(1f), "SUCCESS", "$successRate%")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            StatCard(
+                                Modifier.weight(1f),
+                                "SELECTED",
+                                selected.toString()
+                            )
+                            StatCard(
+                                Modifier.weight(1f),
+                                "REJECTED",
+                                rejected.toString()
+                            )
+                            StatCard(
+                                Modifier.weight(1f),
+                                "SUCCESS",
+                                "$successRate%"
+                            )
                         }
                     }
-                    item { PipelineCard(internships) }
+
                     item {
-                        Text("YOUR APPLICATIONS", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        PipelineCard(internships)
                     }
+
+                    if (upcomingFollowUps.isNotEmpty()) {
+                        item {
+                            FollowUpCard(upcomingFollowUps)
+                        }
+                    }
+
+                    item {
+                        Text(
+                            "YOUR APPLICATIONS",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.5.sp
+                        )
+                    }
+
                     if (internships.isEmpty()) {
                         item {
-                            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF111116)), shape = RoundedCornerShape(20.dp)) {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
                                 Column(Modifier.padding(20.dp)) {
-                                    Text("NO APPLICATIONS YET", color = Color.White, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "NO APPLICATIONS YET",
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                     Spacer(Modifier.height(6.dp))
-                                    Text("Tap + ADD above to create your first internship.", color = Color(0xFF777780), fontSize = 11.sp)
-                                    Spacer(Modifier.height(14.dp))
-                                    Button(
-                                        onClick = { editing = null; errorMessage = ""; showEditor = true },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB28A2E)),
-                                        shape = RoundedCornerShape(14.dp)
-                                    ) { Text("+ ADD INTERNSHIP", fontWeight = FontWeight.Bold) }
+                                    Text(
+                                        "Add your first internship application.",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 11.sp
+                                    )
                                 }
                             }
                         }
                     } else {
-                        items(internships, key = { it.id }) { internship ->
+                        items(
+                            items = internships,
+                            key = { it.id }
+                        ) { internship ->
                             InternshipCard(
                                 internship = internship,
-                                onEdit = { editing = internship; errorMessage = ""; showEditor = true },
-                                onDelete = { deleting = internship }
+                                onEdit = {
+                                    editorProject = internship
+                                    errorMessage = ""
+                                    showEditor = true
+                                },
+                                onDelete = {
+                                    deleting = internship
+                                }
                             )
                         }
                     }
@@ -361,30 +518,48 @@ fun InternshipTrackerScreen(
             AlertDialog(
                 onDismissRequest = { deleting = null },
                 title = { Text("Delete internship?") },
-                text = { Text("Delete ${internship.company} — ${internship.role.ifBlank { "internship" }} permanently?") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val uid = currentUser?.uid
-                        if (uid == null) {
-                            errorMessage = "No signed-in user found."
-                            deleting = null
-                            return@TextButton
-                        }
-                        deleteInternship(
-                            firestore, uid, internship.id,
-                            onSuccess = {
-                                internships = internships.filterNot { it.id == internship.id }
-                                onCountChanged(internships.size)
-                                deleting = null
-                            },
-                            onError = {
-                                errorMessage = it.message ?: "Unable to delete internship."
-                                deleting = null
-                            }
-                        )
-                    }) { Text("DELETE", color = Color(0xFFFF6B6B)) }
+                text = {
+                    Text(
+                        "Delete ${internship.company} — ${internship.role.ifBlank { "internship" }} permanently?"
+                    )
                 },
-                dismissButton = { TextButton(onClick = { deleting = null }) { Text("CANCEL") } }
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val uid = currentUser?.uid
+                            if (uid == null) {
+                                errorMessage = "No signed-in user found."
+                                deleting = null
+                                return@TextButton
+                            }
+
+                            deleteInternship(
+                                firestore = firestore,
+                                uid = uid,
+                                internshipId = internship.id,
+                                onSuccess = {
+                                    internships = internships.filterNot {
+                                        it.id == internship.id
+                                    }
+                                    onCountChanged(internships.size)
+                                    deleting = null
+                                },
+                                onError = {
+                                    errorMessage =
+                                        it.message ?: "Unable to delete internship."
+                                    deleting = null
+                                }
+                            )
+                        }
+                    ) {
+                        Text("DELETE", color = Color(0xFFFF6B6B))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deleting = null }) {
+                        Text("CANCEL")
+                    }
+                }
             )
         }
     }
@@ -399,13 +574,40 @@ private fun InternshipProfileCard(score: Int) {
         score >= 30 -> "DEVELOPING"
         else -> "STARTING"
     }
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116)), shape = RoundedCornerShape(24.dp)) {
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(24.dp)
+    ) {
         Column(Modifier.padding(20.dp)) {
-            Text("INTERNSHIP PROFILE STRENGTH", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            Text(
+                "INTERNSHIP PROFILE STRENGTH",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp
+            )
             Spacer(Modifier.height(7.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-                Text("$score / 100", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
-                Text(label, color = Color(0xFFFFD23F), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Text(
+                    "$score / 100",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    label,
+                    color = Color(0xFFFFD23F),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
             Spacer(Modifier.height(10.dp))
             LinearProgress(score / 100f)
@@ -415,32 +617,104 @@ private fun InternshipProfileCard(score: Int) {
 
 @Composable
 private fun LinearProgress(value: Float) {
-    Box(Modifier.fillMaxWidth().height(8.dp).background(Color(0xFF25252C), RoundedCornerShape(50.dp))) {
-        Box(Modifier.fillMaxWidth(value.coerceIn(0f, 1f)).height(8.dp).background(Color(0xFFFFD23F), RoundedCornerShape(50.dp)))
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(8.dp)
+            .background(
+                Color(0xFF25252C),
+                RoundedCornerShape(50.dp)
+            )
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(value.coerceIn(0f, 1f))
+                .height(8.dp)
+                .background(
+                    Color(0xFFFFD23F),
+                    RoundedCornerShape(50.dp)
+                )
+        )
     }
 }
 
 @Composable
-private fun StatCard(modifier: Modifier, title: String, value: String) {
-    Card(modifier, colors = CardDefaults.cardColors(containerColor = Color(0xFF111116)), shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-            Text(title, color = Color(0xFF777780), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+private fun StatCard(
+    modifier: Modifier,
+    title: String,
+    value: String
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Text(
+                title,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold
+            )
             Spacer(Modifier.height(5.dp))
-            Text(value, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Text(
+                value,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
 
 @Composable
-private fun PipelineCard(internships: List<InternshipRecord>) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116)), shape = RoundedCornerShape(20.dp)) {
+private fun PipelineCard(
+    internships: List<InternshipRecord>
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
         Column(Modifier.padding(17.dp)) {
-            Text("APPLICATION PIPELINE", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+            Text(
+                "APPLICATION PIPELINE",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.4.sp
+            )
+
             Spacer(Modifier.height(12.dp))
+
             internshipStatuses.forEach { status ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(status, color = Color.White, fontSize = 10.sp)
-                    Text(internships.count { it.status == status }.toString(), color = Color(0xFFFFD23F), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                val count = internships.count { it.status == status }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        status,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 10.sp
+                    )
+                    Text(
+                        count.toString(),
+                        color = Color(0xFFFFD23F),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -448,148 +722,563 @@ private fun PipelineCard(internships: List<InternshipRecord>) {
 }
 
 @Composable
-private fun InternshipCard(internship: InternshipRecord, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun FollowUpCard(
+    internships: List<InternshipRecord>
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(Modifier.padding(17.dp)) {
+            Text(
+                "UPCOMING FOLLOW-UPS",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.4.sp
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            internships.forEach {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 5.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "${it.company} • ${it.status}",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 10.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        it.followUpDate,
+                        color = Color(0xFFFFD23F),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InternshipCard(
+    internship: InternshipRecord,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
     val statusColor = when (internship.status) {
         "SELECTED" -> Color(0xFF65E572)
         "REJECTED" -> Color(0xFFFF7B72)
         "INTERVIEW" -> Color(0xFF00D9FF)
         else -> Color(0xFFFFD23F)
     }
+
     val priorityColor = when (internship.priority) {
         "HIGH" -> Color(0xFFFF6B6B)
-        "LOW" -> Color(0xFF777780)
+        "LOW" -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> Color(0xFFFFD23F)
     }
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116)), shape = RoundedCornerShape(20.dp)) {
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
         Column(Modifier.padding(17.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
                 Column(Modifier.weight(1f)) {
-                    Text(internship.company, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        internship.company,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(Modifier.height(3.dp))
-                    Text(internship.role.ifBlank { "Role not added" }, color = Color(0xFF888891), fontSize = 10.sp)
+                    Text(
+                        internship.role.ifBlank { "Role not added" },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp
+                    )
                 }
+
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(internship.status, color = statusColor, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        internship.status,
+                        color = statusColor,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(Modifier.height(3.dp))
-                    Text(internship.priority, color = priorityColor, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        internship.priority,
+                        color = priorityColor,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
+
             Spacer(Modifier.height(10.dp))
-            if (internship.applicationDate.isNotBlank()) Text("Applied: ${internship.applicationDate}", color = Color(0xFF777780), fontSize = 9.sp)
-            if (internship.location.isNotBlank()) Text("Location: ${internship.location}", color = Color(0xFF777780), fontSize = 9.sp)
-            if (internship.stipend.isNotBlank()) Text("Stipend: ${internship.stipend}", color = Color(0xFF777780), fontSize = 9.sp)
-            if (internship.interviewDate.isNotBlank()) Text("Interview: ${internship.interviewDate}", color = Color(0xFF00D9FF), fontSize = 9.sp)
-            if (internship.offerDate.isNotBlank()) Text("Offer: ${internship.offerDate}", color = Color(0xFF65E572), fontSize = 9.sp)
-            if (internship.followUpDate.isNotBlank()) Text("Follow-up: ${internship.followUpDate}", color = Color(0xFFFFD23F), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+
+            if (internship.applicationDate.isNotBlank()) {
+                Text(
+                    "Applied: ${internship.applicationDate}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp
+                )
+            }
+
+            if (internship.location.isNotBlank()) {
+                Text(
+                    "Location: ${internship.location}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp
+                )
+            }
+
+            if (internship.stipend.isNotBlank()) {
+                Text(
+                    "Stipend: ${internship.stipend}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp
+                )
+            }
+
+            if (internship.interviewDate.isNotBlank()) {
+                Text(
+                    "Interview: ${internship.interviewDate}",
+                    color = Color(0xFF00D9FF),
+                    fontSize = 9.sp
+                )
+            }
+
+            if (internship.offerDate.isNotBlank()) {
+                Text(
+                    "Offer: ${internship.offerDate}",
+                    color = Color(0xFF65E572),
+                    fontSize = 9.sp
+                )
+            }
+
+            if (internship.followUpDate.isNotBlank()) {
+                Text(
+                    "Follow-up: ${internship.followUpDate}",
+                    color = Color(0xFFFFD23F),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
             if (internship.notes.isNotBlank()) {
                 Spacer(Modifier.height(7.dp))
-                Text(internship.notes, color = Color(0xFF888891), fontSize = 9.sp, lineHeight = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(
+                    internship.notes,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
+
             Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("EDIT", fontSize = 9.sp) }
-                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("DELETE", fontSize = 9.sp) }
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onEdit,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("EDIT", fontSize = 9.sp)
+                }
+
+                OutlinedButton(
+                    onClick = onDelete,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("DELETE", fontSize = 9.sp)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun InternshipEditor(initial: InternshipRecord?, saving: Boolean, onBack: () -> Unit, onSave: (InternshipRecord) -> Unit) {
-    var company by remember(initial?.id) { mutableStateOf(initial?.company.orEmpty()) }
-    var role by remember(initial?.id) { mutableStateOf(initial?.role.orEmpty()) }
-    var location by remember(initial?.id) { mutableStateOf(initial?.location.orEmpty()) }
-    var applicationDate by remember(initial?.id) { mutableStateOf(initial?.applicationDate.orEmpty()) }
-    var interviewDate by remember(initial?.id) { mutableStateOf(initial?.interviewDate.orEmpty()) }
-    var offerDate by remember(initial?.id) { mutableStateOf(initial?.offerDate.orEmpty()) }
-    var stipend by remember(initial?.id) { mutableStateOf(initial?.stipend.orEmpty()) }
-    var status by remember(initial?.id) { mutableStateOf(initial?.status ?: "INTERESTED") }
-    var priority by remember(initial?.id) { mutableStateOf(initial?.priority ?: "MEDIUM") }
-    var jobUrl by remember(initial?.id) { mutableStateOf(initial?.jobUrl.orEmpty()) }
-    var notes by remember(initial?.id) { mutableStateOf(initial?.notes.orEmpty()) }
-    var followUpDate by remember(initial?.id) { mutableStateOf(initial?.followUpDate.orEmpty()) }
-    var error by remember(initial?.id) { mutableStateOf("") }
+private fun InternshipEditor(
+    initial: InternshipRecord?,
+    saving: Boolean,
+    onBack: () -> Unit,
+    onSave: (InternshipRecord) -> Unit
+) {
+    var company by remember(initial?.id) {
+        mutableStateOf(initial?.company.orEmpty())
+    }
+    var role by remember(initial?.id) {
+        mutableStateOf(initial?.role.orEmpty())
+    }
+    var location by remember(initial?.id) {
+        mutableStateOf(initial?.location.orEmpty())
+    }
+    var applicationDate by remember(initial?.id) {
+        mutableStateOf(initial?.applicationDate.orEmpty())
+    }
+    var interviewDate by remember(initial?.id) {
+        mutableStateOf(initial?.interviewDate.orEmpty())
+    }
+    var offerDate by remember(initial?.id) {
+        mutableStateOf(initial?.offerDate.orEmpty())
+    }
+    var stipend by remember(initial?.id) {
+        mutableStateOf(initial?.stipend.orEmpty())
+    }
+    var status by remember(initial?.id) {
+        mutableStateOf(initial?.status ?: "INTERESTED")
+    }
+    var priority by remember(initial?.id) {
+        mutableStateOf(initial?.priority ?: "MEDIUM")
+    }
+    var jobUrl by remember(initial?.id) {
+        mutableStateOf(initial?.jobUrl.orEmpty())
+    }
+    var notes by remember(initial?.id) {
+        mutableStateOf(initial?.notes.orEmpty())
+    }
+    var followUpDate by remember(initial?.id) {
+        mutableStateOf(initial?.followUpDate.orEmpty())
+    }
+    var error by remember(initial?.id) {
+        mutableStateOf("")
+    }
 
     LazyColumn(
-        Modifier.fillMaxSize().background(Color(0xFF050507)).padding(20.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack, enabled = !saving) { Text("‹", color = Color.White, fontSize = 34.sp) }
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = onBack,
+                    enabled = !saving
+                ) {
+                    Text("‹", color = MaterialTheme.colorScheme.onSurface, fontSize = 34.sp)
+                }
+
                 Column {
-                    Text(if (initial == null) "ADD INTERNSHIP" else "EDIT INTERNSHIP", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-                    Text("INTERNSHIP TRACKER", color = Color(0xFFFFD23F), fontSize = 8.sp, letterSpacing = 1.5.sp)
+                    Text(
+                        if (initial == null) "ADD INTERNSHIP"
+                        else "EDIT INTERNSHIP",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "INTERNSHIP TRACKER",
+                        color = Color(0xFFFFD23F),
+                        fontSize = 8.sp,
+                        letterSpacing = 1.5.sp
+                    )
                 }
             }
         }
-        item { Field("Company", company) { company = it; error = "" } }
-        item { Field("Role", role, "Android Intern, SDE Intern...") { role = it } }
-        item { Field("Location / Remote", location) { location = it } }
-        item { Field("Application Date", applicationDate, "DD/MM/YYYY") { applicationDate = it } }
-        item { Field("Interview Date", interviewDate, "DD/MM/YYYY") { interviewDate = it } }
-        item { Field("Offer Date", offerDate, "DD/MM/YYYY") { offerDate = it } }
-        item { Field("Follow-up Date", followUpDate, "DD/MM/YYYY") { followUpDate = it } }
-        item { Field("Stipend", stipend) { stipend = it } }
-        item { Text("APPLICATION STATUS", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold) }
-        items(internshipStatuses) { option -> ChoiceRow(option, status == option) { status = option } }
-        item { Text("PRIORITY", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold) }
-        items(internshipPriorities) { option -> ChoiceRow(option, priority == option) { priority = option } }
-        item { Field("Job / Application URL", jobUrl) { jobUrl = it } }
+
         item {
-            OutlinedTextField(value = notes, onValueChange = { notes = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes") }, placeholder = { Text("Rounds, requirements, preparation notes...") }, minLines = 4)
+            OutlinedTextField(
+                value = company,
+                onValueChange = {
+                    company = it
+                    error = ""
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Company") },
+                singleLine = true
+            )
         }
-        if (error.isNotBlank()) item { Text(error, color = Color(0xFFFF6B6B), fontSize = 10.sp) }
+
+        item {
+            OutlinedTextField(
+                value = role,
+                onValueChange = { role = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Role") },
+                placeholder = { Text("Android Intern, SDE Intern...") },
+                singleLine = true
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = location,
+                onValueChange = { location = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Location / Remote") },
+                singleLine = true
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = applicationDate,
+                onValueChange = { applicationDate = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Application Date") },
+                placeholder = { Text("DD/MM/YYYY") },
+                singleLine = true
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = interviewDate,
+                onValueChange = { interviewDate = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Interview Date") },
+                placeholder = { Text("DD/MM/YYYY") },
+                singleLine = true
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = offerDate,
+                onValueChange = { offerDate = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Offer Date") },
+                placeholder = { Text("DD/MM/YYYY") },
+                singleLine = true
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = followUpDate,
+                onValueChange = { followUpDate = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Follow-up Date") },
+                placeholder = { Text("DD/MM/YYYY") },
+                singleLine = true
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = stipend,
+                onValueChange = { stipend = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Stipend") },
+                singleLine = true
+            )
+        }
+
+        item {
+            Text(
+                "APPLICATION STATUS",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        items(internshipStatuses) { option ->
+            ChoiceRow(
+                text = option,
+                selected = status == option,
+                onClick = { status = option }
+            )
+        }
+
+        item {
+            Spacer(Modifier.height(5.dp))
+            Text(
+                "PRIORITY",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        items(internshipPriorities) { option ->
+            ChoiceRow(
+                text = option,
+                selected = priority == option,
+                onClick = { priority = option }
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = jobUrl,
+                onValueChange = { jobUrl = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Job / Application URL") },
+                singleLine = true
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Notes") },
+                placeholder = {
+                    Text("Rounds, requirements, preparation notes...")
+                },
+                minLines = 4
+            )
+        }
+
+        if (error.isNotBlank()) {
+            item {
+                Text(
+                    error,
+                    color = Color(0xFFFF6B6B),
+                    fontSize = 10.sp
+                )
+            }
+        }
+
         item {
             Button(
                 onClick = {
                     if (company.trim().isBlank()) {
                         error = "Please enter a company name."
-                    } else {
-                        onSave(
-                            InternshipRecord(
-                                id = initial?.id ?: UUID.randomUUID().toString(),
-                                company = company.trim(), role = role.trim(), location = location.trim(),
-                                applicationDate = applicationDate.trim(), interviewDate = interviewDate.trim(),
-                                offerDate = offerDate.trim(), stipend = stipend.trim(), status = status,
-                                jobUrl = jobUrl.trim(), notes = notes.trim(), followUpDate = followUpDate.trim(),
-                                priority = priority, createdAt = initial?.createdAt ?: System.currentTimeMillis(),
-                                updatedAt = System.currentTimeMillis()
-                            )
-                        )
+                        return@Button
                     }
+
+                    onSave(
+                        InternshipRecord(
+                            id = initial?.id ?: UUID.randomUUID().toString(),
+                            company = company.trim(),
+                            role = role.trim(),
+                            location = location.trim(),
+                            applicationDate = applicationDate.trim(),
+                            interviewDate = interviewDate.trim(),
+                            offerDate = offerDate.trim(),
+                            stipend = stipend.trim(),
+                            status = status,
+                            jobUrl = jobUrl.trim(),
+                            notes = notes.trim(),
+                            followUpDate = followUpDate.trim(),
+                            priority = priority,
+                            createdAt = initial?.createdAt
+                                ?: System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
                 },
                 enabled = !saving,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB28A2E)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFB28A2E)
+                ),
                 shape = RoundedCornerShape(16.dp)
-            ) { Text(if (saving) "SAVING..." else "SAVE INTERNSHIP", fontWeight = FontWeight.Bold) }
+            ) {
+                Text(
+                    if (saving) "SAVING..." else "SAVE INTERNSHIP",
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun Field(label: String, value: String, placeholder: String = "", onValueChange: (String) -> Unit) {
-    OutlinedTextField(value = value, onValueChange = onValueChange, modifier = Modifier.fillMaxWidth(), label = { Text(label) }, placeholder = { if (placeholder.isNotBlank()) Text(placeholder) }, singleLine = true)
-}
-
-@Composable
-private fun ChoiceRow(text: String, selected: Boolean, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.outlinedButtonColors(containerColor = if (selected) Color(0xFF211A2D) else Color.Transparent)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(text, color = if (selected) Color(0xFFFFD23F) else Color.White, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
-            if (selected) Text("✓", color = Color(0xFF65E572))
+private fun ChoiceRow(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (selected) Color(0xFF211A2D)
+            else Color.Transparent
+        )
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text,
+                color = if (selected) Color(0xFFFFD23F)
+                else Color.White,
+                fontWeight = if (selected) FontWeight.Bold
+                else FontWeight.Normal
+            )
+            if (selected) {
+                Text("✓", color = Color(0xFF65E572))
+            }
         }
     }
 }
 
-private fun calculateInternshipProfileStrength(internships: List<InternshipRecord>, projectCount: Int): Int {
+private fun calculateInternshipProfileStrength(
+    internships: List<InternshipRecord>,
+    projectCount: Int
+): Int {
     if (internships.isEmpty() && projectCount == 0) return 0
-    val applicationActivity = (internships.size / 10f).coerceIn(0f, 1f) * 25f
-    val interviewExposure = (internships.count { it.status == "INTERVIEW" || it.status == "SELECTED" } / 5f).coerceIn(0f, 1f) * 20f
-    val outcomeExperience = (internships.count { it.status == "SELECTED" } / 2f).coerceIn(0f, 1f) * 20f
-    val projectFoundation = (projectCount / 4f).coerceIn(0f, 1f) * 20f
-    val completeProfiles = internships.count { it.company.isNotBlank() && it.role.isNotBlank() && it.applicationDate.isNotBlank() && it.jobUrl.isNotBlank() }
-    val profileCompleteness = if (internships.isEmpty()) 0f else completeProfiles.toFloat() / internships.size * 15f
-    return (applicationActivity + interviewExposure + outcomeExperience + projectFoundation + profileCompleteness).roundToInt().coerceIn(0, 100)
+
+    val applicationActivity =
+        (internships.size / 10f).coerceIn(0f, 1f) * 25f
+
+    val interviewExposure =
+        (
+                internships.count {
+                    it.status == "INTERVIEW" || it.status == "SELECTED"
+                } / 5f
+                ).coerceIn(0f, 1f) * 20f
+
+    val outcomeExperience =
+        (internships.count { it.status == "SELECTED" } / 2f)
+            .coerceIn(0f, 1f) * 20f
+
+    val projectFoundation =
+        (projectCount / 4f).coerceIn(0f, 1f) * 20f
+
+    val completeProfiles = internships.count {
+        it.company.isNotBlank() &&
+                it.role.isNotBlank() &&
+                it.applicationDate.isNotBlank() &&
+                it.jobUrl.isNotBlank()
+    }
+
+    val profileCompleteness =
+        if (internships.isEmpty()) 0f
+        else (completeProfiles.toFloat() / internships.size) * 15f
+
+    return (
+            applicationActivity +
+                    interviewExposure +
+                    outcomeExperience +
+                    projectFoundation +
+                    profileCompleteness
+            )
+        .roundToInt()
+        .coerceIn(0, 100)
 }

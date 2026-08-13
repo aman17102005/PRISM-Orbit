@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -60,8 +61,6 @@ data class FirebaseProjectItem(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
-private val ProjectBackground = Color(0xFF050507)
-private val ProjectCard = Color(0xFF111116)
 private val ProjectPurple = Color(0xFF9147FF)
 private val ProjectTextSecondary = Color(0xFF92929C)
 private val ProjectGreen = Color(0xFF5BE27C)
@@ -172,7 +171,7 @@ fun ProjectsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ProjectBackground)
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
 
@@ -183,7 +182,7 @@ fun ProjectsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onBack) {
-                    Text("←", color = Color.White, fontSize = 28.sp)
+                    Text("←", color = MaterialTheme.colorScheme.onSurface, fontSize = 28.sp)
                 }
 
                 Spacer(Modifier.width(4.dp))
@@ -191,14 +190,14 @@ fun ProjectsScreen(
                 Column(Modifier.weight(1f)) {
                     Text(
                         "PROJECTS",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 25.sp,
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 1.sp
                     )
                     Text(
                         "${projects.size} saved projects",
-                        color = ProjectTextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
                 }
@@ -479,7 +478,7 @@ private fun EmptyProjectsState(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 "NO PROJECTS YET",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold
             )
@@ -488,7 +487,7 @@ private fun EmptyProjectsState(
 
             Text(
                 "Your saved projects will appear here.",
-                color = ProjectTextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp
             )
 
@@ -519,7 +518,7 @@ private fun ProjectCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = ProjectCard
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(Modifier.padding(18.dp)) {
@@ -528,7 +527,7 @@ private fun ProjectCard(
                 Column(Modifier.weight(1f)) {
                     Text(
                         project.name,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -546,7 +545,7 @@ private fun ProjectCard(
                 TextButton(onClick = onEdit) {
                     Text(
                         "EDIT",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 11.sp
                     )
                 }
@@ -584,7 +583,7 @@ private fun ProjectCard(
 
                 Text(
                     "Completed: ${project.completionDate}",
-                    color = ProjectTextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp
                 )
             }
@@ -594,7 +593,7 @@ private fun ProjectCard(
 
                 Text(
                     "IMAGE URL SAVED",
-                    color = ProjectTextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -620,7 +619,7 @@ private fun ProjectInfoChip(
     ) {
         Text(
             text,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             fontSize = 10.sp
         )
     }
@@ -633,7 +632,7 @@ private fun ProjectStatusChip(
     val statusColor =
         when (status) {
             "COMPLETED" -> ProjectGreen
-            "ARCHIVED" -> ProjectTextSecondary
+            "ARCHIVED" -> MaterialTheme.colorScheme.onSurfaceVariant
             "IDEA" -> ProjectPurple
             "PLANNING" -> ProjectOrange
             else -> ProjectOrange
@@ -703,7 +702,7 @@ private fun ProjectEditor(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ProjectBackground)
+            .background(MaterialTheme.colorScheme.background)
     ) {
         LazyColumn(
             modifier = Modifier
@@ -722,7 +721,7 @@ private fun ProjectEditor(
                     ) {
                         Text(
                             "←",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 28.sp
                         )
                     }
@@ -736,7 +735,7 @@ private fun ProjectEditor(
                             } else {
                                 "EDIT PROJECT"
                             },
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 23.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -780,7 +779,7 @@ private fun ProjectEditor(
             item {
                 Text(
                     "Image upload is disabled until Firebase Storage is enabled. The URL is optional.",
-                    color = ProjectTextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp
                 )
             }
@@ -934,7 +933,7 @@ private fun ProjectEditor(
                     if (saving) {
                         CircularProgressIndicator(
                             modifier = Modifier.width(20.dp),
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             strokeWidth = 2.dp
                         )
 

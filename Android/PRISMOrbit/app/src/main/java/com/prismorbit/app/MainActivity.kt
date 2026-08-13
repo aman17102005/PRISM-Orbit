@@ -24,8 +24,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -49,10 +47,17 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.prismorbit.app.ui.theme.PRISMOrbitTheme
 import kotlinx.coroutines.delay
 
-// ============================================================================
-// APP APPEARANCE STATE
-// ============================================================================
 
+// ============================================================================
+// SHARED APP APPEARANCE STATE
+// ============================================================================
+// SYSTEM = follow device theme
+// LIGHT  = force light theme
+// DARK   = force dark theme
+//
+// SettingsScreen updates this state, and MainActivity feeds it into the
+// application theme so the whole Compose tree recomposes immediately.
+// ============================================================================
 object PrismAppearanceState {
     var mode by mutableStateOf("SYSTEM")
 }
@@ -73,72 +78,75 @@ class MainActivity : ComponentActivity() {
         firestore = FirebaseFirestore.getInstance()
 
         setContent {
-            PRISMOrbitTheme {
+            PRISMOrbitTheme(
+                appearance = PrismAppearanceState.mode
+            ) {
 
-                val appearanceMode = PrismAppearanceState.mode
-                val useDarkTheme = when (appearanceMode) {
-                    "DARK" -> true
-                    "LIGHT" -> false
-                    else -> androidx.compose.foundation.isSystemInDarkTheme()
+                var showOpeningScreen by remember {
+                    mutableStateOf(true)
                 }
 
+                var userIsAuthenticated by remember {
+                    mutableStateOf(
+                        firebaseAuth.currentUser?.isEmailVerified == true
+                    )
+                }
+
+                // Restore the saved appearance preference when a signed-in
+                // user opens the app. SettingsScreen also updates the shared
+                // state immediately when the user taps an appearance option.
                 LaunchedEffect(firebaseAuth.currentUser?.uid) {
                     val uid = firebaseAuth.currentUser?.uid ?: return@LaunchedEffect
-                    firestore.collection("users").document(uid).get()
+
+                    firestore
+                        .collection("users")
+                        .document(uid)
+                        .get()
                         .addOnSuccessListener { document ->
                             val settings = document.get("settings") as? Map<*, *>
+
                             PrismAppearanceState.mode =
-                                settings?.get("appearance")?.toString() ?: "SYSTEM"
+                                settings?.get("appearance")
+                                    ?.toString()
+                                    ?.uppercase()
+                                    ?.takeIf {
+                                        it == "SYSTEM" ||
+                                                it == "LIGHT" ||
+                                                it == "DARK"
+                                    }
+                                    ?: "SYSTEM"
                         }
                 }
 
-                MaterialTheme(
-                    colorScheme = if (useDarkTheme) {
-                        darkColorScheme()
-                    } else {
-                        lightColorScheme()
-                    }
-                ) {
+                if (showOpeningScreen) {
 
-                    var showOpeningScreen by remember {
-                        mutableStateOf(true)
-                    }
+                    OpeningScreen(
+                        onFinished = {
+                            showOpeningScreen = false
+                        }
+                    )
 
-                    var userIsAuthenticated by remember {
-                        mutableStateOf(
-                            firebaseAuth.currentUser?.isEmailVerified == true
-                        )
-                    }
+                } else if (userIsAuthenticated) {
 
-                    if (showOpeningScreen) {
+                    ProfileRouter(
+                        firebaseAuth = firebaseAuth,
+                        firestore = firestore,
+                        onLogout = {
+                            firebaseAuth.signOut()
+                            PrismAppearanceState.mode = "SYSTEM"
+                            showOpeningScreen = false
+                            userIsAuthenticated = false
+                        }
+                    )
 
-                        OpeningScreen(
-                            onFinished = {
-                                showOpeningScreen = false
-                            }
-                        )
+                } else {
 
-                    } else if (userIsAuthenticated) {
-
-                        ProfileRouter(
-                            firebaseAuth = firebaseAuth,
-                            firestore = firestore,
-                            onLogout = {
-                                firebaseAuth.signOut()
-                                PrismAppearanceState.mode = "SYSTEM"
-                                userIsAuthenticated = false
-                            }
-                        )
-
-                    } else {
-
-                        AuthenticationScreen(
-                            firebaseAuth = firebaseAuth,
-                            onAuthenticationSuccess = {
-                                userIsAuthenticated = true
-                            }
-                        )
-                    }
+                    AuthenticationScreen(
+                        firebaseAuth = firebaseAuth,
+                        onAuthenticationSuccess = {
+                            userIsAuthenticated = true
+                        }
+                    )
                 }
             }
         }
@@ -656,7 +664,7 @@ fun ProfileRouter(
             )
         }
         else -> {
-            HomeScreen()
+            HomeScreen(onLogout = onLogout)
         }
 
     }

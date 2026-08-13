@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -406,7 +407,7 @@ fun GrowthTrackerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         when {
             loading -> Box(
@@ -422,7 +423,7 @@ fun GrowthTrackerScreen(
             ) {
                 Text(
                     text = if (error.isBlank()) "No growth data available yet." else error,
-                    color = Color(0xFF9999A3),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp
                 )
             }
@@ -462,7 +463,7 @@ private fun GrowthContent(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "‹",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 40.sp,
                 modifier = Modifier.clickable { onBack() }
             )
@@ -470,7 +471,7 @@ private fun GrowthContent(
             Column {
                 Text(
                     text = "GROWTH",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 25.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -488,7 +489,7 @@ private fun GrowthContent(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(22.dp),
@@ -496,7 +497,7 @@ private fun GrowthContent(
             ) {
                 Text(
                     text = "OVERALL GROWTH",
-                    color = Color(0xFF888891),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.6.sp
@@ -530,7 +531,7 @@ private fun GrowthContent(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "${data.overall}%",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 38.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -549,7 +550,7 @@ private fun GrowthContent(
         Spacer(Modifier.height(22.dp))
         Text(
             text = "CONNECTED AREAS",
-            color = Color(0xFF888891),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.5.sp
@@ -564,7 +565,7 @@ private fun GrowthContent(
         Spacer(Modifier.height(14.dp))
         Text(
             text = "ACTIVITY FROM EXISTING DESKTOPS",
-            color = Color(0xFF888891),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.5.sp
@@ -593,7 +594,7 @@ private fun GrowthContent(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(Modifier.padding(18.dp)) {
                 Text(
@@ -606,7 +607,7 @@ private fun GrowthContent(
                 Spacer(Modifier.height(10.dp))
                 Text(
                     text = "${strongest.first} is currently your strongest connected area. ${weakest.first} needs the most attention based on the data already stored in PRISMOrbit.",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp
                 )
             }
@@ -638,7 +639,7 @@ private fun GrowthMetric(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.padding(15.dp)) {
             Row(
@@ -647,7 +648,7 @@ private fun GrowthMetric(
             ) {
                 Text(
                     text = title,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -663,7 +664,7 @@ private fun GrowthMetric(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
-                    .background(Color(0xFF25252C), RoundedCornerShape(50.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50.dp))
             ) {
                 Box(
                     modifier = Modifier
@@ -685,19 +686,19 @@ private fun GrowthStat(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(15.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.padding(12.dp)) {
             Text(
                 text = title,
-                color = Color(0xFF777780),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 8.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = value,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Bold
             )

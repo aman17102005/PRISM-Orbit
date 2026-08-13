@@ -1,3 +1,4 @@
+
 package com.prismorbit.app
 
 import android.content.Intent
@@ -23,6 +24,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -166,7 +168,9 @@ fun SettingsScreen(
                 about = document.getString("about") ?: ""
 
                 val settings = document.get("settings") as? Map<*, *>
-                appearance = settings?.get("appearance")?.toString() ?: "SYSTEM"
+                appearance = settings?.get("appearance")?.toString()?.uppercase()
+                    ?.takeIf { it == "SYSTEM" || it == "LIGHT" || it == "DARK" }
+                    ?: "SYSTEM"
                 PrismAppearanceState.mode = appearance
                 notificationsEnabled = settings?.get("notificationsEnabled") as? Boolean ?: true
                 followUpReminders = settings?.get("followUpReminders") as? Boolean ?: true
@@ -309,7 +313,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507))
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
@@ -319,13 +323,13 @@ fun SettingsScreen(
         ) {
             Text(
                 text = "‹",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 38.sp,
                 modifier = Modifier.clickable { onBack() }
             )
             Spacer(modifier = Modifier.size(10.dp))
             Column {
-                Text("SETTINGS", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
+                Text("SETTINGS", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
                 Text("PRISM CONTROL CENTER", color = Color(0xFFB76CFF), fontSize = 8.sp, letterSpacing = 1.8.sp)
             }
         }
@@ -382,7 +386,7 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(18.dp))
         SettingsSectionTitle("APPEARANCE")
         SettingsCard {
-            Text("Choose your preferred appearance", color = Color.White, fontSize = 13.sp)
+            Text("Choose your preferred appearance", color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp)
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 listOf("DARK", "LIGHT", "SYSTEM").forEach { option ->
@@ -399,7 +403,7 @@ fun SettingsScreen(
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Selected: $appearance", color = Color(0xFF888891), fontSize = 10.sp)
+            Text("Selected: $appearance", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
         }
 
         Spacer(modifier = Modifier.height(18.dp))
@@ -409,7 +413,7 @@ fun SettingsScreen(
                 notificationsEnabled = it
                 savePreferences()
             }
-            Divider(color = Color(0xFF28282F))
+            Divider(color = MaterialTheme.colorScheme.outlineVariant)
             SettingsToggleRow("Internship follow-up reminders", followUpReminders) {
                 followUpReminders = it
                 savePreferences()
@@ -417,7 +421,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 "Follow-up preference is saved to your account and can be used by the internship reminder system.",
-                color = Color(0xFF777780),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp
             )
         }
@@ -447,7 +451,7 @@ fun SettingsScreen(
         SettingsCard {
             Text(
                 "Export your saved PRISMOrbit profile and career data as a text file.",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 13.sp
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -466,7 +470,7 @@ fun SettingsScreen(
             SettingsRow("VERSION", "1.0")
             Text(
                 "Your personal academic, development and career workspace.",
-                color = Color(0xFF777780),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp
             )
         }
@@ -489,17 +493,17 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(28.dp),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF15151B))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier.padding(22.dp),
                 verticalArrangement = Arrangement.Center
             ) {
-                Text("DELETE ACCOUNT?", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("DELETE ACCOUNT?", color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     "This permanently removes your PRISMOrbit account data. This action cannot be undone.",
-                    color = Color(0xFF9999A3),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
                 Spacer(modifier = Modifier.height(18.dp))
@@ -525,7 +529,7 @@ fun SettingsScreen(
 private fun SettingsSectionTitle(text: String) {
     Text(
         text = text,
-        color = Color(0xFF888891),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontSize = 10.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 1.6.sp
@@ -537,7 +541,7 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(18.dp), content = content)
     }
@@ -546,9 +550,9 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun SettingsRow(label: String, value: String) {
     Column(modifier = Modifier.padding(vertical = 5.dp)) {
-        Text(label, color = Color(0xFF777780), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         Spacer(modifier = Modifier.height(3.dp))
-        Text(value, color = Color.White, fontSize = 12.sp)
+        Text(value, color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp)
     }
 }
 
@@ -575,10 +579,10 @@ private fun SettingsToggleRow(label: String, checked: Boolean, onCheckedChange: 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(label, color = Color.White, fontSize = 12.sp)
+        Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp)
         Text(
             if (checked) "ON" else "OFF",
-            color = if (checked) Color(0xFF65E572) else Color(0xFF777780),
+            color = if (checked) Color(0xFF65E572) else MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold
         )

@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.Divider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -793,7 +794,28 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
         )
     } else if (showProfileScreen) {
         ProfileScreen(
-            onBack = { showProfileScreen = false }
+            onBack = {
+                showProfileScreen = false
+
+                val uid = signedInUser?.uid
+                if (uid != null) {
+                    firestore
+                        .collection("users")
+                        .document(uid)
+                        .get()
+                        .addOnSuccessListener { document ->
+                            val fullName = document
+                                .getString("name")
+                                ?.trim()
+                                .orEmpty()
+
+                            userFirstName = fullName
+                                .split(Regex("\\s+"))
+                                .firstOrNull()
+                                .orEmpty()
+                        }
+                }
+            }
         )
     } else if (showInternshipsScreen) {
         InternshipTrackerScreen(
@@ -1111,10 +1133,10 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
 private fun DashboardScreen(
     dsaProblems: List<DSAProblem>,
     currentCgpa: String,
-    userFirstName: String,
     onCgpaClick: () -> Unit,
     onDsaClick: () -> Unit,
     onProfileClick: () -> Unit,
+    userFirstName: String,
     projectCount: Int,
     onProjectsClick: () -> Unit,
     internshipCount: Int,
@@ -1131,7 +1153,7 @@ private fun DashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507))
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(
                 horizontal = 20.dp,
@@ -1153,7 +1175,7 @@ private fun DashboardScreen(
 
                 Text(
                     text = "PRISM",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 30.sp,
                     fontWeight = FontWeight.Light,
                     letterSpacing = 5.sp
@@ -1189,7 +1211,7 @@ private fun DashboardScreen(
 
                 Text(
                     text = userFirstName,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -1210,7 +1232,7 @@ private fun DashboardScreen(
             } else {
                 "Welcome back, $userFirstName."
             },
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             fontSize = 25.sp,
             fontWeight = FontWeight.SemiBold
         )
@@ -1221,7 +1243,7 @@ private fun DashboardScreen(
 
         Text(
             text = "Your journey is taking shape.",
-            color = Color(0xFF85858F),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 13.sp
         )
 
@@ -1234,7 +1256,7 @@ private fun DashboardScreen(
                 .fillMaxWidth()
                 .clickable { onProfileClick() },
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Row(
                 modifier = Modifier
@@ -1254,13 +1276,13 @@ private fun DashboardScreen(
                     Spacer(modifier = Modifier.height(5.dp))
                     Text(
                         text = "View and edit your personal information",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 13.sp
                     )
                 }
                 Text(
                     text = "›",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 28.sp
                 )
             }
@@ -1276,7 +1298,7 @@ private fun DashboardScreen(
 
         Text(
             text = "YOUR PRISM",
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 2.sp
@@ -1400,7 +1422,7 @@ private fun DashboardScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF111116)
+                containerColor = MaterialTheme.colorScheme.surface
             )
         ) {
 
@@ -1422,7 +1444,7 @@ private fun DashboardScreen(
 
                 Text(
                     text = "Focus on DSA this week.",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -1433,7 +1455,7 @@ private fun DashboardScreen(
 
                 Text(
                     text = "You're close to your next milestone.",
-                    color = Color(0xFF777780),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp
                 )
             }
@@ -1453,7 +1475,7 @@ private fun DashboardScreen(
                 .clickable { onSettingsClick() },
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF111116)
+                containerColor = MaterialTheme.colorScheme.surface
             )
         ) {
             Row(
@@ -1474,14 +1496,14 @@ private fun DashboardScreen(
                     Spacer(modifier = Modifier.height(5.dp))
                     Text(
                         text = "Account, preferences & security",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 13.sp
                     )
                 }
 
                 Text(
                     text = "›",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 28.sp
                 )
             }
@@ -1524,7 +1546,7 @@ private fun AcademicsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507))
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
@@ -1534,13 +1556,13 @@ private fun AcademicsScreen(
         ) {
             Text(
                 text = "‹",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 38.sp,
                 modifier = Modifier.clickable { onBack() }
             )
             Spacer(modifier = Modifier.size(10.dp))
             Column {
-                Text("ACADEMICS", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
+                Text("ACADEMICS", color = MaterialTheme.colorScheme.onSurface, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
                 Text("PERFORMANCE + PLANNING", color = Color(0xFFB76CFF), fontSize = 8.sp, letterSpacing = 1.8.sp)
             }
         }
@@ -1550,10 +1572,10 @@ private fun AcademicsScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text("ACADEMIC OVERVIEW", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Text("ACADEMIC OVERVIEW", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1561,8 +1583,8 @@ private fun AcademicsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("${"%.1f".format(currentCgpa)}", color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
-                        Text("CURRENT CGPA", color = Color(0xFF777780), fontSize = 9.sp, letterSpacing = 1.2.sp)
+                        Text("${"%.1f".format(currentCgpa)}", color = MaterialTheme.colorScheme.onSurface, fontSize = 42.sp, fontWeight = FontWeight.Bold)
+                        Text("CURRENT CGPA", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, letterSpacing = 1.2.sp)
                     }
                     Text("TARGET  ${"%.1f".format(targetCgpa)}", color = Color(0xFF00D9FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
@@ -1572,10 +1594,10 @@ private fun AcademicsScreen(
                 Button(
                     onClick = onCgpaClick,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15151B)),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(15.dp)
                 ) {
-                    Text("VIEW / EDIT CGPA", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("VIEW / EDIT CGPA", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1658,10 +1680,10 @@ private fun AcademicsScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
-                Text("SGPA TREND", color = Color(0xFF777780), fontSize = 9.sp, letterSpacing = 1.5.sp)
+                Text("SGPA TREND", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, letterSpacing = 1.5.sp)
                 Spacer(modifier = Modifier.height(12.dp))
                 AcademicGrowthGraph(semesterValues)
             }
@@ -1694,12 +1716,12 @@ private fun AcademicsScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
-                    Text("NO UPCOMING EVENTS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    Text("NO UPCOMING EVENTS", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     Spacer(modifier = Modifier.height(5.dp))
-                    Text("Add your assignments, tests, viva, practicals and exams here.", color = Color(0xFF777780), fontSize = 10.sp)
+                    Text("Add your assignments, tests, viva, practicals and exams here.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
                 }
             }
         }
@@ -1737,7 +1759,7 @@ private fun SemesterRow(name: String, sgpa: String, completed: Boolean) {
             .fillMaxWidth()
             .padding(vertical = 3.dp),
         shape = RoundedCornerShape(15.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
             modifier = Modifier
@@ -1746,7 +1768,7 @@ private fun SemesterRow(name: String, sgpa: String, completed: Boolean) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(name, color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Text(
                 text = if (completed) sgpa else "NOT COMPLETED",
                 color = if (completed) Color(0xFF00D9FF) else Color(0xFF66666F),
@@ -1827,7 +1849,7 @@ private fun AcademicCalendar(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Row(
@@ -1838,11 +1860,11 @@ private fun AcademicCalendar(
                 Column {
                     Text(
                         text = first.getDisplayName(Calendar.MONTH, Calendar.LONG, java.util.Locale.getDefault()).uppercase(),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(year.toString(), color = Color(0xFF777780), fontSize = 9.sp)
+                    Text(year.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
                 }
                 Text(
                     text = "${events.size} EVENTS",
@@ -1936,7 +1958,7 @@ private fun AcademicEventRow(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(17.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(15.dp)) {
             Row(
@@ -1946,7 +1968,7 @@ private fun AcademicEventRow(
             ) {
                 Text(
                     event.title,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
@@ -1976,7 +1998,7 @@ private fun AcademicEventRow(
                 Spacer(modifier = Modifier.height(5.dp))
                 Text(
                     "Syllabus: ${event.syllabus}",
-                    color = Color(0xFF888891),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 9.sp
                 )
             }
@@ -1984,7 +2006,7 @@ private fun AcademicEventRow(
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     event.notes,
-                    color = Color(0xFF777780),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 9.sp
                 )
             }
@@ -2063,7 +2085,7 @@ private fun AddAcademicEventScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
             modifier = Modifier
@@ -2074,7 +2096,7 @@ private fun AddAcademicEventScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "‹",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 38.sp,
                     modifier = Modifier.clickable { onBack() }
                 )
@@ -2082,7 +2104,7 @@ private fun AddAcademicEventScreen(
                 Column {
                     Text(
                         if (initialEvent == null) "ADD EVENT" else "EDIT EVENT",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -2120,7 +2142,7 @@ private fun AddAcademicEventScreen(
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 "EVENT TYPE",
-                color = Color(0xFF888891),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp
@@ -2286,15 +2308,15 @@ private fun ProjectsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507))
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+            Text("‹", color = MaterialTheme.colorScheme.onSurface, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
             Spacer(modifier = Modifier.size(10.dp))
             Column {
-                Text("PROJECTS", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+                Text("PROJECTS", color = MaterialTheme.colorScheme.onSurface, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
                 Text("BUILD • DOCUMENT • SHOWCASE", color = Color(0xFF65E572), fontSize = 8.sp, letterSpacing = 1.5.sp)
             }
         }
@@ -2315,11 +2337,11 @@ private fun ProjectsScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (projects.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text("NO PROJECTS YET", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("NO PROJECTS YET", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("Add your projects, tasks, links and project photos here.", color = Color(0xFF777780), fontSize = 10.sp)
+                    Text("Add your projects, tasks, links and project photos here.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
                 }
             }
         } else {
@@ -2378,17 +2400,17 @@ private fun ProjectCard(
     val taskTotal = project.tasks.size
     val statusColor = when (project.status) {
         "COMPLETED" -> Color(0xFF65E572)
-        "ARCHIVED" -> Color(0xFF777780)
+        "ARCHIVED" -> MaterialTheme.colorScheme.onSurfaceVariant
         "PLANNING" -> Color(0xFFFFD23F)
         "ONGOING" -> Color(0xFF00D9FF)
         else -> Color(0xFFB76CFF)
     }
 
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(17.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(project.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(project.name, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(project.status, color = statusColor, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
                 }
@@ -2397,15 +2419,15 @@ private fun ProjectCard(
 
             if (project.description.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(project.description, color = Color(0xFF888891), fontSize = 10.sp, lineHeight = 15.sp)
+                Text(project.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
             }
 
             Spacer(modifier = Modifier.height(10.dp))
             ProgressBar(project.progress / 100f)
             Spacer(modifier = Modifier.height(10.dp))
             Text("Tech: ${project.techStack.ifBlank { "Not added" }}", color = Color(0xFFB76CFF), fontSize = 9.sp)
-            Text("Started: ${project.startDate.ifBlank { "Not added" }}", color = Color(0xFF777780), fontSize = 9.sp)
-            Text("Tasks: $completedTasks / $taskTotal", color = Color(0xFF777780), fontSize = 9.sp)
+            Text("Started: ${project.startDate.ifBlank { "Not added" }}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
+            Text("Tasks: $completedTasks / $taskTotal", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
 
             if (project.tasks.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
@@ -2414,9 +2436,9 @@ private fun ProjectCard(
                         modifier = Modifier.fillMaxWidth().clickable { onToggleTask(task.id) }.padding(vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(if (task.completed) "☑" else "☐", color = if (task.completed) Color(0xFF65E572) else Color(0xFF777780), fontSize = 14.sp)
+                        Text(if (task.completed) "☑" else "☐", color = if (task.completed) Color(0xFF65E572) else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                         Spacer(modifier = Modifier.width(7.dp))
-                        Text(task.title, color = if (task.completed) Color(0xFF777780) else Color.White, fontSize = 9.sp)
+                        Text(task.title, color = if (task.completed) MaterialTheme.colorScheme.onSurfaceVariant else Color.White, fontSize = 9.sp)
                     }
                 }
             }
@@ -2451,13 +2473,13 @@ private fun ProjectEditorScreen(
     val statuses = listOf("IDEA", "PLANNING", "ONGOING", "COMPLETED", "ARCHIVED")
     val progress = progressText.toIntOrNull()?.coerceIn(0, 100) ?: 0
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF050507))) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("‹", color = Color.White, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
+                Text("‹", color = MaterialTheme.colorScheme.onSurface, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
                 Spacer(modifier = Modifier.size(10.dp))
                 Column {
-                    Text(if (initialProject == null) "ADD PROJECT" else "EDIT PROJECT", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (initialProject == null) "ADD PROJECT" else "EDIT PROJECT", color = MaterialTheme.colorScheme.onSurface, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                     Text("PROJECT PORTFOLIO", color = Color(0xFF65E572), fontSize = 8.sp, letterSpacing = 1.5.sp)
                 }
             }
@@ -2574,7 +2596,7 @@ private fun DSAScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507))
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
@@ -2584,7 +2606,7 @@ private fun DSAScreen(
         ) {
             Text(
                 text = "‹",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 38.sp,
                 modifier = Modifier.clickable { onBack() }
             )
@@ -2592,7 +2614,7 @@ private fun DSAScreen(
             Column {
                 Text(
                     text = "DSA",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -2610,7 +2632,7 @@ private fun DSAScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -2618,7 +2640,7 @@ private fun DSAScreen(
             ) {
                 Text(
                     text = "OVERALL DSA SCORE",
-                    color = Color(0xFF888891),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
@@ -2691,12 +2713,12 @@ private fun DSAScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Text(
                     text = "LAST 6 CHECKPOINTS",
-                    color = Color(0xFF777780),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 9.sp,
                     letterSpacing = 1.5.sp
                 )
@@ -2715,11 +2737,11 @@ private fun DSAScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Text(
                         text = "LOADING YOUR DSA DATA...",
-                        color = Color(0xFF777780),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(18.dp)
                     )
@@ -2730,19 +2752,19 @@ private fun DSAScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Text(
                             text = "NO PROBLEMS YET",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp
                         )
                         Spacer(modifier = Modifier.height(5.dp))
                         Text(
                             text = "Add the problems you have solved. They will be saved to your PRISM account and restored when you reopen the app.",
-                            color = Color(0xFF777780),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 10.sp
                         )
                     }
@@ -2785,7 +2807,7 @@ private fun DSAScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
@@ -2798,7 +2820,7 @@ private fun DSAScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = generateDsaInsight(problems),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     lineHeight = 21.sp
                 )
@@ -2862,7 +2884,7 @@ private fun AddProblemScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
             modifier = Modifier
@@ -2876,7 +2898,7 @@ private fun AddProblemScreen(
             ) {
                 Text(
                     text = "‹",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 38.sp,
                     modifier = Modifier.clickable { onBack() }
                 )
@@ -2884,7 +2906,7 @@ private fun AddProblemScreen(
                 Column {
                     Text(
                         text = "ADD PROBLEM",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -2917,7 +2939,7 @@ private fun AddProblemScreen(
 
             Text(
                 text = "DIFFICULTY",
-                color = Color(0xFF888891),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp
@@ -2939,7 +2961,7 @@ private fun AddProblemScreen(
 
             Text(
                 text = "TOPIC",
-                color = Color(0xFF888891),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp
@@ -2976,12 +2998,12 @@ private fun AddProblemScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Text(
                         text = "PRISM WEIGHT",
-                        color = Color(0xFF888891),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.5.sp
@@ -2996,7 +3018,7 @@ private fun AddProblemScreen(
                     Spacer(modifier = Modifier.height(5.dp))
                     Text(
                         text = "Difficulty + topic importance",
-                        color = Color(0xFF777780),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 10.sp
                     )
                 }
@@ -3105,14 +3127,14 @@ private fun CircularProgress(
 
             Text(
                 text = "$percentage%",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 38.sp,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
                 text = "DSA SCORE",
-                color = Color(0xFF777780),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 9.sp,
                 letterSpacing = 1.5.sp
             )
@@ -3230,7 +3252,7 @@ private fun DifficultyRow(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF111116)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
 
@@ -3256,7 +3278,7 @@ private fun DifficultyRow(
 
             Text(
                 text = title,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -3299,13 +3321,13 @@ private fun TopicProgressRow(
 
             Text(
                 text = topic,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 10.sp
             )
 
             Text(
                 text = "${(progress * 100).roundToInt()}%",
-                color = Color(0xFF9999A3),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 10.sp
             )
         }
@@ -3339,7 +3361,7 @@ private fun ProblemRow(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
             modifier = Modifier
@@ -3368,14 +3390,14 @@ private fun ProblemRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = problem.name,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     text = problem.topic,
-                    color = Color(0xFF777780),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 9.sp
                 )
             }
@@ -3423,7 +3445,7 @@ private fun SmallStatCard(
         modifier = modifier,
         shape = RoundedCornerShape(17.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF111116)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
 
@@ -3433,7 +3455,7 @@ private fun SmallStatCard(
 
             Text(
                 text = title,
-                color = Color(0xFF777780),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 8.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
@@ -3445,7 +3467,7 @@ private fun SmallStatCard(
 
             Text(
                 text = value,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -3561,7 +3583,7 @@ private fun SectionTitle(
 
     Text(
         text = text,
-        color = Color.White,
+        color = MaterialTheme.colorScheme.onSurface,
         fontSize = 13.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 1.8.sp
@@ -3601,7 +3623,7 @@ private fun CGPAScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507))
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
@@ -3611,13 +3633,13 @@ private fun CGPAScreen(
         ) {
             Text(
                 text = "‹",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 38.sp,
                 modifier = Modifier.clickable { onBack() }
             )
             Spacer(modifier = Modifier.size(10.dp))
             Column {
-                Text("CGPA", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
+                Text("CGPA", color = MaterialTheme.colorScheme.onSurface, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
                 Text("ACADEMIC PERFORMANCE", color = Color(0xFFB76CFF), fontSize = 8.sp, letterSpacing = 1.8.sp)
             }
         }
@@ -3627,13 +3649,13 @@ private fun CGPAScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("CURRENT CGPA", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Text("CURRENT CGPA", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(currentCgpa, color = Color.White, fontSize = 58.sp, fontWeight = FontWeight.Bold)
-                Text("VALID RANGE: 4.0 – 10.0", color = Color(0xFF777780), fontSize = 9.sp, letterSpacing = 1.2.sp)
+                Text(currentCgpa, color = MaterialTheme.colorScheme.onSurface, fontSize = 58.sp, fontWeight = FontWeight.Bold)
+                Text("VALID RANGE: 4.0 – 10.0", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, letterSpacing = 1.2.sp)
                 Spacer(modifier = Modifier.height(22.dp))
                 ProgressBar(progress = progress)
                 Spacer(modifier = Modifier.height(12.dp))
@@ -3644,7 +3666,7 @@ private fun CGPAScreen(
                         current!! >= target!! -> "Target achieved 🎯"
                         else -> "${"%.1f".format(target - current)} points to target"
                     },
-                    color = Color(0xFF9999A3),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp
                 )
             }
@@ -3655,10 +3677,10 @@ private fun CGPAScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text("YOUR TARGET", color = Color(0xFF888891), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Text("YOUR TARGET", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 Spacer(modifier = Modifier.height(7.dp))
                 Text(targetCgpa, color = Color(0xFF00D9FF), fontSize = 30.sp, fontWeight = FontWeight.Bold)
             }
@@ -3728,10 +3750,10 @@ private fun CGPAScreen(
             Button(
                 onClick = { editMode = true; validationError = ""; savedMessage = "" },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15151B)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(15.dp)
             ) {
-                Text("EDIT CGPA", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("EDIT CGPA", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -3745,7 +3767,7 @@ private fun CGPAScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("✦  PRISM INSIGHT", color = Color(0xFFB76CFF), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
@@ -3757,7 +3779,7 @@ private fun CGPAScreen(
                         current >= 8f -> "You're building a strong academic foundation. Keep pushing toward your target."
                         else -> "Focus on consistency and steady improvement toward your target."
                     },
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     lineHeight = 21.sp
                 )
@@ -3851,12 +3873,12 @@ private fun ProfileScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF050507))
+                .background(MaterialTheme.colorScheme.background)
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("No signed-in account found.", color = Color.White)
+            Text("No signed-in account found.", color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = onBack) { Text("BACK") }
         }
@@ -3902,10 +3924,10 @@ private fun ProfileScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF050507)),
+                .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center
         ) {
-            Text("Loading your profile...", color = Color.White)
+            Text("Loading your profile...", color = MaterialTheme.colorScheme.onSurface)
         }
         return
     }
@@ -3913,7 +3935,7 @@ private fun ProfileScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507))
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
@@ -3923,7 +3945,7 @@ private fun ProfileScreen(
         ) {
             Text(
                 text = "‹",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 38.sp,
                 modifier = Modifier.clickable { onBack() }
             )
@@ -3931,7 +3953,7 @@ private fun ProfileScreen(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "MY PROFILE",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 25.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -3949,7 +3971,7 @@ private fun ProfileScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF111116))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier
@@ -3980,7 +4002,7 @@ private fun ProfileScreen(
                     ) {
                         Text(
                             text = fullName.firstOrNull()?.uppercase() ?: "A",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 34.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -3999,7 +4021,7 @@ private fun ProfileScreen(
                 } else {
                     Text(
                         text = if (photoUrl.isNotBlank()) "Profile photo saved" else "No profile photo yet",
-                        color = Color(0xFF777780),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 10.sp
                     )
                 }
@@ -4150,10 +4172,10 @@ private fun ProfileScreen(
                     isEditing = true
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15151B)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(15.dp)
             ) {
-                Text("EDIT PROFILE", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("EDIT PROFILE", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -4215,7 +4237,7 @@ private fun FeatureCard(
         modifier = modifier,
         shape = RoundedCornerShape(21.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF111116)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
 
@@ -4237,7 +4259,7 @@ private fun FeatureCard(
 
             Text(
                 text = value,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 27.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -4248,7 +4270,7 @@ private fun FeatureCard(
 
             Text(
                 text = subtitle,
-                color = Color(0xFF777780),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 9.sp
             )
         }
