@@ -1,3 +1,4 @@
+
 package com.prismorbit.app
 
 import androidx.compose.foundation.background
@@ -51,7 +52,6 @@ import java.util.UUID
 data class FirebaseProjectItem(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",
-    val imageUrl: String = "",
     val description: String = "",
     val majorTopic: String = "",
     val codingLanguage: String = "",
@@ -88,7 +88,6 @@ private fun FirebaseProjectItem.toFirestoreMap(): Map<String, Any> {
         "id" to id,
         "name" to name,
         "normalizedName" to name.trim().lowercase(Locale.ROOT),
-        "imageUrl" to imageUrl,
         "description" to description,
         "majorTopic" to majorTopic,
         "codingLanguage" to codingLanguage,
@@ -105,7 +104,6 @@ private fun firestoreMapToProject(
     return FirebaseProjectItem(
         id = data["id"] as? String ?: UUID.randomUUID().toString(),
         name = data["name"] as? String ?: "",
-        imageUrl = data["imageUrl"] as? String ?: "",
         description = data["description"] as? String ?: "",
         majorTopic = data["majorTopic"] as? String ?: "",
         codingLanguage = data["codingLanguage"] as? String ?: "",
@@ -351,7 +349,6 @@ fun ProjectsScreen(
 
                                 val projectToSave = project.copy(
                                     name = cleanName,
-                                    imageUrl = project.imageUrl.trim(),
                                     description = cleanDescription,
                                     majorTopic = cleanMajorTopic,
                                     codingLanguage = cleanLanguage,
@@ -588,16 +585,6 @@ private fun ProjectCard(
                 )
             }
 
-            if (project.imageUrl.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-
-                Text(
-                    "IMAGE URL SAVED",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
         }
     }
 }
@@ -667,10 +654,6 @@ private fun ProjectEditor(
 ) {
     var name by remember(initialProject?.id) {
         mutableStateOf(initialProject?.name ?: "")
-    }
-
-    var imageUrl by remember(initialProject?.id) {
-        mutableStateOf(initialProject?.imageUrl ?: "")
     }
 
     var description by remember(initialProject?.id) {
@@ -759,28 +742,6 @@ private fun ProjectEditor(
                     placeholder = { Text("Enter project name") },
                     singleLine = true,
                     enabled = !saving
-                )
-            }
-
-            item {
-                OutlinedTextField(
-                    value = imageUrl,
-                    onValueChange = { imageUrl = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Project Image URL") },
-                    placeholder = {
-                        Text("Optional public image URL")
-                    },
-                    singleLine = true,
-                    enabled = !saving
-                )
-            }
-
-            item {
-                Text(
-                    "Image upload is disabled until Firebase Storage is enabled. The URL is optional.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp
                 )
             }
 
@@ -902,7 +863,6 @@ private fun ProjectEditor(
                                 id = existing?.id
                                     ?: UUID.randomUUID().toString(),
                                 name = name,
-                                imageUrl = imageUrl,
                                 description = description,
                                 majorTopic = majorTopic,
                                 codingLanguage = codingLanguage,
@@ -953,3 +913,4 @@ private fun ProjectEditor(
         }
     }
 }
+
