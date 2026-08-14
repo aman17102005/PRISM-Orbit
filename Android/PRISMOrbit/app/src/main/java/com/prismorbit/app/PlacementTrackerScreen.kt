@@ -1,3 +1,4 @@
+
 package com.prismorbit.app
 
 import androidx.compose.foundation.background
@@ -302,6 +303,8 @@ fun PlacementTrackerScreen(
     var achievements by remember { mutableStateOf<List<PlacementAchievementRecord>>(emptyList()) }
     var certifications by remember { mutableStateOf<List<PlacementCertificationRecord>>(emptyList()) }
     var learning by remember { mutableStateOf<List<PlacementLearningRecord>>(emptyList()) }
+    var githubProfileUrl by remember { mutableStateOf("") }
+    var githubSaving by remember { mutableStateOf(false) }
 
     var scores by remember { mutableStateOf(PlacementSourceScores()) }
     var loading by remember { mutableStateOf(true) }
@@ -363,6 +366,7 @@ fun PlacementTrackerScreen(
 
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { doc ->
+                githubProfileUrl = doc.getString("githubProfileUrl").orEmpty()
                 val cgpa = doc.get("currentCgpa")?.toString()?.toFloatOrNull() ?: 0f
                 academic = (cgpa / 10f * 100f).roundToInt().coerceIn(0, 100)
                 finishedOne()
@@ -721,7 +725,7 @@ fun PlacementTrackerScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 PlacementCollectionFinal(
-                    emptyText = "Add technical, Core CS, soft-skill and aptitude ratings.",
+                    emptyText = "Add technical, Core CS, communication, soft-skill and aptitude ratings.",
                     addText = "+ ADD SKILL",
                     empty = skills.isEmpty(),
                     onAdd = {
@@ -753,6 +757,59 @@ fun PlacementTrackerScreen(
                                 )
                             }
                         )
+                    }
+                }
+
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    "🌐 GITHUB PROFILE",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp
+                )
+                Spacer(Modifier.height(10.dp))
+                Card(
+                    Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(Modifier.padding(17.dp)) {
+                        OutlinedTextField(
+                            value = githubProfileUrl,
+                            onValueChange = { githubProfileUrl = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("GitHub Profile URL") },
+                            placeholder = { Text("https://github.com/username") },
+                            singleLine = true
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                if (uid != null) {
+                                    githubSaving = true
+                                    firestore.collection("users").document(uid)
+                                        .set(
+                                            mapOf("githubProfileUrl" to githubProfileUrl.trim()),
+                                            SetOptions.merge()
+                                        )
+                                        .addOnSuccessListener {
+                                            githubProfileUrl = githubProfileUrl.trim()
+                                            githubSaving = false
+                                        }
+                                        .addOnFailureListener {
+                                            errorMessage = it.message ?: "Unable to save GitHub profile."
+                                            githubSaving = false
+                                        }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = uid != null && !githubSaving,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text(if (githubSaving) "SAVING..." else "SAVE GITHUB PROFILE")
+                        }
                     }
                 }
 
@@ -1065,7 +1122,7 @@ private fun PlacementSkillEditor(
     ) {
         OutlinedTextField(name, { name = it; error = "" }, Modifier.fillMaxWidth(), label = { Text("Skill Name") }, singleLine = true)
         Spacer(Modifier.height(10.dp))
-        listOf("Technical", "Core CS", "Soft Skill", "Aptitude").forEach {
+        listOf("Technical", "Core CS", "Soft Skill", "Communication", "Aptitude").forEach {
             PlacementChoice(it, category == it) { category = it }
         }
         Spacer(Modifier.height(8.dp))

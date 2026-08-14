@@ -1,3 +1,4 @@
+
 package com.prismorbit.app
 
 import androidx.compose.foundation.Canvas
@@ -59,7 +60,8 @@ private data class GrowthSnapshot(
     val completedProjects: Int,
     val internshipCount: Int,
     val interviews: Int,
-    val selected: Int
+    val selected: Int,
+    val githubProfileAdded: Boolean
 ) {
     val overall: Int
         get() = weightedGrowthScore(
@@ -141,6 +143,7 @@ private fun buildGrowthSnapshot(results: List<Any>): GrowthSnapshot {
     val achievementDocuments = (results[5] as QuerySnapshot).documents
     val certificationDocuments = (results[6] as QuerySnapshot).documents
     val learningDocuments = (results[7] as QuerySnapshot).documents
+    val githubProfileAdded = userDocument.getString("githubProfileUrl").orEmpty().isNotBlank()
 
     val cgpa = userDocument.get("currentCgpa")
         .toString()
@@ -231,7 +234,8 @@ private fun buildGrowthSnapshot(results: List<Any>): GrowthSnapshot {
         completedProjects = completedProjects,
         internshipCount = internshipCount,
         interviews = interviews,
-        selected = selected
+        selected = selected,
+        githubProfileAdded = githubProfileAdded
     )
 }
 
@@ -588,6 +592,39 @@ private fun GrowthContent(
             GrowthStat("COMPLETED", data.completedProjects.toString(), Modifier.weight(1f))
             GrowthStat("INTERVIEWS", data.interviews.toString(), Modifier.weight(1f))
             GrowthStat("SELECTED", data.selected.toString(), Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(15.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "GITHUB PROFILE",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Placement evidence",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 8.sp
+                    )
+                }
+                Text(
+                    text = if (data.githubProfileAdded) "ADDED" else "NOT ADDED",
+                    color = if (data.githubProfileAdded) Color(0xFF65E572) else Color(0xFFFF7B72),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(Modifier.height(22.dp))
