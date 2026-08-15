@@ -366,6 +366,9 @@ data class ProjectTask(
 
 data class ProjectItem(
     val id: Long = System.currentTimeMillis(),
+    // Real Firestore document ID. Kept separately so older projects
+    // whose document ID is not numeric can still be edited/deleted.
+    val firestoreId: String = "",
     val name: String,
     val description: String,
     val techStack: String,
@@ -507,6 +510,7 @@ private fun documentToProjectItem(
 
     return ProjectItem(
         id = projectId,
+        firestoreId = document.id,
 
         name = name,
 
@@ -588,7 +592,11 @@ private fun saveProject(
         .collection("users")
         .document(uid)
         .collection("projects")
-        .document(project.id.toString())
+        .document(
+            project.firestoreId.ifBlank {
+                project.id.toString()
+            }
+        )
         .set(project.toMap())
         .addOnSuccessListener {
 
@@ -609,21 +617,57 @@ private fun deleteProject(
     onError: (Exception) -> Unit = {}
 ) {
 
-    firestore
-        .collection("users")
-        .document(uid)
-        .collection("projects")
-        .document(projectId.toString())
-        .delete()
-        .addOnSuccessListener {
+    val collection =
+        firestore
+            .collection("users")
+            .document(uid)
+            .collection("projects")
 
-            onSuccess()
+    collection
+        .get()
+        .addOnSuccessListener { snapshot ->
+
+            val matchingDocument =
+                snapshot.documents.firstOrNull { document ->
+
+                    val rawId =
+                        document.get("id")
+
+                    when (rawId) {
+                        is Number ->
+                            rawId.toLong() == projectId
+
+                        is String ->
+                            rawId.toLongOrNull() == projectId
+
+                        else ->
+                            false
+                    } ||
+                            document.id == projectId.toString() ||
+                            document.id.hashCode().toLong() == projectId
+                }
+
+            if (matchingDocument == null) {
+                onError(
+                    Exception("Project record could not be found in Firestore.")
+                )
+                return@addOnSuccessListener
+            }
+
+            matchingDocument.reference
+                .delete()
+                .addOnSuccessListener {
+                    onSuccess()
+                }
+                .addOnFailureListener { exception ->
+                    onError(exception)
+                }
         }
         .addOnFailureListener { exception ->
-
             onError(exception)
         }
 }
+
 // =========================================================
 // HOME SCREEN
 // =========================================================
@@ -649,6 +693,21 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     var internshipCount by remember { mutableStateOf(0) }
     var placementReadiness by remember { mutableStateOf<Int?>(null) }
     var growthScore by remember { mutableStateOf<Int?>(null) }
+// =====================================================
+// SMART AI STATE
+// =====================================================
+
+    var smartAiInsight by remember {
+        mutableStateOf<SmartAiInsight?>(null)
+    }
+
+    var smartAiLoading by remember {
+        mutableStateOf(true)
+    }
+
+    var smartAiError by remember {
+        mutableStateOf("")
+    }
 
     var academicRecord by remember { mutableStateOf(AcademicRecord()) }
     var academicLoadError by remember { mutableStateOf("") }
@@ -756,6 +815,41 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
                 growthScore = null
                 placementReadiness = null
                 internshipCount = 0
+            }
+        )
+    }
+
+    // =====================================================
+// SMART AI DATA LOADER
+// =====================================================
+
+    LaunchedEffect(signedInUser?.uid) {
+
+        val uid =
+            signedInUser?.uid
+                ?: return@LaunchedEffect
+
+        smartAiLoading = true
+        smartAiError = ""
+
+        loadSmartAiInsight(
+            firestore = firestore,
+            uid = uid,
+
+            onSuccess = { insight ->
+
+                smartAiInsight = insight
+                smartAiLoading = false
+                smartAiError = ""
+            },
+
+            onError = { error ->
+
+                smartAiLoading = false
+
+                smartAiError =
+                    error.message
+                        ?: "Unable to generate SMART AI insight."
             }
         )
     }
@@ -1119,7 +1213,13 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
             growthScore = growthScore,
             placementReadiness = placementReadiness,
             onGrowthClick = { showGrowthScreen = true },
-            onSettingsClick = { showSettingsScreen = true }
+            onSettingsClick = {
+                showSettingsScreen = true
+            },
+
+            smartAiInsight = smartAiInsight,
+            smartAiLoading = smartAiLoading,
+            smartAiError = smartAiError
         )
     }
 }
@@ -1145,7 +1245,10 @@ private fun DashboardScreen(
     growthScore: Int?,
     placementReadiness: Int?,
     onGrowthClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    smartAiInsight: SmartAiInsight?,
+    smartAiLoading: Boolean,
+    smartAiError: String
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -1425,11 +1528,9 @@ private fun DashboardScreen(
                 containerColor = MaterialTheme.colorScheme.surface
             )
         ) {
-
             Column(
                 modifier = Modifier.padding(20.dp)
             ) {
-
                 Text(
                     text = "✦  SMART AI",
                     color = Color(0xFFB76CFF),
@@ -1442,22 +1543,135 @@ private fun DashboardScreen(
                     modifier = Modifier.height(13.dp)
                 )
 
-                Text(
-                    text = "Focus on DSA this week.",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                when {
+                    smartAiLoading -> {
+                        Text(
+                            text = "Analyzing your PRISM data...",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
 
-                Spacer(
-                    modifier = Modifier.height(5.dp)
-                )
+                        Spacer(
+                            modifier = Modifier.height(5.dp)
+                        )
 
-                Text(
-                    text = "You're close to your next milestone.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp
-                )
+                        Text(
+                            text = "Checking your academics, DSA, projects, internships and placement progress.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    smartAiError.isNotBlank() -> {
+                        Text(
+                            text = "SMART AI is temporarily unavailable.",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(5.dp)
+                        )
+
+                        Text(
+                            text = smartAiError,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    smartAiInsight != null -> {
+                        Text(
+                            text = smartAiInsight!!.title,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(7.dp)
+                        )
+
+                        Text(
+                            text = smartAiInsight!!.message,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            lineHeight = 17.sp
+                        )
+
+                        if (smartAiInsight!!.reason.isNotBlank()) {
+                            Spacer(
+                                modifier = Modifier.height(10.dp)
+                            )
+
+                            Text(
+                                text = smartAiInsight!!.reason,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+
+                        Spacer(
+                            modifier = Modifier.height(13.dp)
+                        )
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.background
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp)
+                            ) {
+                                Text(
+                                    text = "NEXT ACTION",
+                                    color = Color(0xFF00D9FF),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.5.sp
+                                )
+
+                                Spacer(
+                                    modifier = Modifier.height(6.dp)
+                                )
+
+                                Text(
+                                    text = smartAiInsight!!.action,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    lineHeight = 18.sp
+                                )
+                            }
+                        }
+
+                        Spacer(
+                            modifier = Modifier.height(11.dp)
+                        )
+
+                        Text(
+                            text = "${smartAiInsight!!.category} • PRIORITY ${smartAiInsight!!.priority}/100",
+                            color = Color(0xFFB76CFF),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.2.sp
+                        )
+                    }
+
+                    else -> {
+                        Text(
+                            text = "SMART AI insight is not available yet.",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
             }
         }
 
@@ -2536,6 +2750,7 @@ private fun ProjectEditorScreen(
                         onSave(
                             ProjectItem(
                                 id = initialProject?.id ?: System.currentTimeMillis(),
+                                firestoreId = initialProject?.firestoreId.orEmpty(),
                                 name = name.trim(),
                                 description = description.trim(),
                                 techStack = techStack.trim(),

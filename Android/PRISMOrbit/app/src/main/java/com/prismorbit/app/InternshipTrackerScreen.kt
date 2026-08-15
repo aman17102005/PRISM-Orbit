@@ -911,74 +911,74 @@ private fun InternshipCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-                Text(
-                    "Stipend: ${internship.stipend}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp
-                )
-            }
+            Text(
+                "Stipend: ${internship.stipend}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp
+            )
+        }
 
-            if (internship.interviewDate.isNotBlank()) {
-                Text(
-                    "Interview: ${internship.interviewDate}",
-                    color = Color(0xFF00D9FF),
-                    fontSize = 9.sp
-                )
-            }
+        if (internship.interviewDate.isNotBlank()) {
+            Text(
+                "Interview: ${internship.interviewDate}",
+                color = Color(0xFF00D9FF),
+                fontSize = 9.sp
+            )
+        }
 
-            if (internship.offerDate.isNotBlank()) {
-                Text(
-                    "Offer: ${internship.offerDate}",
-                    color = Color(0xFF65E572),
-                    fontSize = 9.sp
-                )
-            }
+        if (internship.offerDate.isNotBlank()) {
+            Text(
+                "Offer: ${internship.offerDate}",
+                color = Color(0xFF65E572),
+                fontSize = 9.sp
+            )
+        }
 
-            if (internship.followUpDate.isNotBlank()) {
-                Text(
-                    "Follow-up: ${internship.followUpDate}",
-                    color = Color(0xFFFFD23F),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+        if (internship.followUpDate.isNotBlank()) {
+            Text(
+                "Follow-up: ${internship.followUpDate}",
+                color = Color(0xFFFFD23F),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
-            if (internship.notes.isNotBlank()) {
-                Spacer(Modifier.height(7.dp))
-                Text(
-                    internship.notes,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp,
-                    lineHeight = 14.sp,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+        if (internship.notes.isNotBlank()) {
+            Spacer(Modifier.height(7.dp))
+            Text(
+                internship.notes,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp,
+                lineHeight = 14.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
 
-            Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(10.dp))
 
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(7.dp)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            OutlinedButton(
+                onClick = onEdit,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                OutlinedButton(
-                    onClick = onEdit,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("EDIT", fontSize = 9.sp)
-                }
+                Text("EDIT", fontSize = 9.sp)
+            }
 
-                OutlinedButton(
-                    onClick = onDelete,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("DELETE", fontSize = 9.sp)
-                }
+            OutlinedButton(
+                onClick = onDelete,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("DELETE", fontSize = 9.sp)
             }
         }
     }
+}
 
 
 @Composable
@@ -1368,7 +1368,9 @@ private fun calculateInternshipProfileStrength(
     internships: List<InternshipRecord>,
     projectCount: Int
 ): Int {
-    if (internships.isEmpty() && projectCount == 0) return 0
+    // No internship records means there is no internship evidence.
+    // Projects must not create a non-zero internship score.
+    if (internships.isEmpty()) return 0
 
     val applicationActivity =
         (internships.size / 10f).coerceIn(0f, 1f) * 25f
