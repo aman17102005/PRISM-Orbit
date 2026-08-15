@@ -51,6 +51,11 @@ data class InternshipRecord(
     val id: String = UUID.randomUUID().toString(),
     val company: String = "",
     val role: String = "",
+    val duration: String = "",
+    val technicalSkillsUsed: String = "",
+    val responsibilities: String = "",
+    val problemSolved: String = "",
+    val outcomeImpact: String = "",
     val location: String = "",
     val applicationDate: String = "",
     val interviewDate: String = "",
@@ -93,6 +98,11 @@ private fun InternshipRecord.toFirestoreMap(): Map<String, Any> = mapOf(
     "id" to id,
     "company" to company,
     "role" to role,
+    "duration" to duration,
+    "technicalSkillsUsed" to technicalSkillsUsed,
+    "responsibilities" to responsibilities,
+    "problemSolved" to problemSolved,
+    "outcomeImpact" to outcomeImpact,
     "location" to location,
     "applicationDate" to applicationDate,
     "interviewDate" to interviewDate,
@@ -116,6 +126,11 @@ private fun documentToInternshipRecord(
         id = data["id"]?.toString()?.ifBlank { document.id } ?: document.id,
         company = data["company"]?.toString().orEmpty(),
         role = data["role"]?.toString().orEmpty(),
+        duration = data["duration"]?.toString().orEmpty(),
+        technicalSkillsUsed = data["technicalSkillsUsed"]?.toString().orEmpty(),
+        responsibilities = data["responsibilities"]?.toString().orEmpty(),
+        problemSolved = data["problemSolved"]?.toString().orEmpty(),
+        outcomeImpact = data["outcomeImpact"]?.toString().orEmpty(),
         location = data["location"]?.toString().orEmpty(),
         applicationDate = data["applicationDate"]?.toString().orEmpty(),
         interviewDate = data["interviewDate"]?.toString().orEmpty(),
@@ -297,6 +312,11 @@ fun InternshipTrackerScreen(
                         internship = candidate.copy(
                             company = candidate.company.trim(),
                             role = candidate.role.trim(),
+                            duration = candidate.duration.trim(),
+                            technicalSkillsUsed = candidate.technicalSkillsUsed.trim(),
+                            responsibilities = candidate.responsibilities.trim(),
+                            problemSolved = candidate.problemSolved.trim(),
+                            outcomeImpact = candidate.outcomeImpact.trim(),
                             location = candidate.location.trim(),
                             applicationDate = candidate.applicationDate.trim(),
                             interviewDate = candidate.interviewDate.trim(),
@@ -841,15 +861,56 @@ private fun InternshipCard(
                 )
             }
 
-            if (internship.location.isNotBlank()) {
+            if (internship.duration.isNotBlank()) {
                 Text(
-                    "Location: ${internship.location}",
+                    "Duration: ${internship.duration}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 9.sp
                 )
             }
 
-            if (internship.stipend.isNotBlank()) {
+            if (internship.technicalSkillsUsed.isNotBlank()) {
+                Text(
+                    "Technical Skills: ${internship.technicalSkillsUsed}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (internship.responsibilities.isNotBlank()) {
+                Text(
+                    "Work Done: ${internship.responsibilities}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (internship.problemSolved.isNotBlank()) {
+                Text(
+                    "Problem Solved: ${internship.problemSolved}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (internship.outcomeImpact.isNotBlank()) {
+                Text(
+                    "Outcome / Impact: ${internship.outcomeImpact}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
                 Text(
                     "Stipend: ${internship.stipend}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -918,7 +979,7 @@ private fun InternshipCard(
             }
         }
     }
-}
+
 
 @Composable
 private fun InternshipEditor(
@@ -932,6 +993,21 @@ private fun InternshipEditor(
     }
     var role by remember(initial?.id) {
         mutableStateOf(initial?.role.orEmpty())
+    }
+    var duration by remember(initial?.id) {
+        mutableStateOf(initial?.duration.orEmpty())
+    }
+    var technicalSkillsUsed by remember(initial?.id) {
+        mutableStateOf(initial?.technicalSkillsUsed.orEmpty())
+    }
+    var responsibilities by remember(initial?.id) {
+        mutableStateOf(initial?.responsibilities.orEmpty())
+    }
+    var problemSolved by remember(initial?.id) {
+        mutableStateOf(initial?.problemSolved.orEmpty())
+    }
+    var outcomeImpact by remember(initial?.id) {
+        mutableStateOf(initial?.outcomeImpact.orEmpty())
     }
     var location by remember(initial?.id) {
         mutableStateOf(initial?.location.orEmpty())
@@ -1030,11 +1106,56 @@ private fun InternshipEditor(
 
         item {
             OutlinedTextField(
-                value = location,
-                onValueChange = { location = it },
+                value = duration,
+                onValueChange = { duration = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Location / Remote") },
+                label = { Text("Duration") },
+                placeholder = { Text("3 months, 6 months...") },
                 singleLine = true
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = technicalSkillsUsed,
+                onValueChange = { technicalSkillsUsed = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Technical Skills Used") },
+                placeholder = { Text("Kotlin, Firebase, REST APIs...") },
+                minLines = 2
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = responsibilities,
+                onValueChange = { responsibilities = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Responsibilities / Work Done") },
+                placeholder = { Text("What did you actually work on?") },
+                minLines = 3
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = problemSolved,
+                onValueChange = { problemSolved = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Problem Solved") },
+                placeholder = { Text("What problem or challenge did you solve?") },
+                minLines = 3
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = outcomeImpact,
+                onValueChange = { outcomeImpact = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Outcome / Impact") },
+                placeholder = { Text("What was the result or impact?") },
+                minLines = 3
             )
         }
 
@@ -1173,6 +1294,11 @@ private fun InternshipEditor(
                             id = initial?.id ?: UUID.randomUUID().toString(),
                             company = company.trim(),
                             role = role.trim(),
+                            duration = duration.trim(),
+                            technicalSkillsUsed = technicalSkillsUsed.trim(),
+                            responsibilities = responsibilities.trim(),
+                            problemSolved = problemSolved.trim(),
+                            outcomeImpact = outcomeImpact.trim(),
                             location = location.trim(),
                             applicationDate = applicationDate.trim(),
                             interviewDate = interviewDate.trim(),
