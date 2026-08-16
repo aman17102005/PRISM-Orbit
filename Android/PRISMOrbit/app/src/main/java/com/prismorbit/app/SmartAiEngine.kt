@@ -10,7 +10,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 // ============================================================
-// PRISM ORBIT — SMART AI ENGINE
+// PRISM ORBIT — SMART AI v0.3 ENGINE
 // ============================================================
 //
 // SMART AI uses only data already stored by PRISM Orbit.
@@ -24,9 +24,15 @@ import kotlin.math.roundToInt
 // Achievements + Certifications + Learning 10%
 // Growth / Consistency                      5%
 //
+// v0.3 ARCHITECTURE
+// • Base weights remain exactly the v0.2 distribution.
+// • Optional role-aware multipliers are normalized back to 100%.
+// • Trend only activates when existing timestamp data is present.
+// • Target CGPA affects context, never the academic weight.
+//
 // IMPORTANT RULES
 // • Test / Demo / Live URL is completely ignored.
-// • GitHub URL is not a scoring factor.
+// • A raw GitHub URL is not scored; analyzed repository evidence can contribute to Project practical evidence.
 // • GitHub authorship / AI-code usage is not evaluated.
 // • AI Engineering is not used because PRISM has no such dataset.
 // • Missing data is not silently treated as poor performance.
@@ -56,6 +62,7 @@ data class SmartAiInsight(
 // ============================================================
 
 private data class SmartAiSnapshot(
+    val profile: DocumentSnapshot,
     val currentCgpa: Float?,
     val targetCgpa: Float?,
     val academicEvents: List<DocumentSnapshot>,
@@ -72,9 +79,11 @@ private data class SmartAiSnapshot(
 private data class FactorScore(
     val key: String,
     val label: String,
+    val baseWeight: Float,
     val weight: Float,
     val score: Float?,
     val observed: Boolean,
+    val trend: Float,
     val reason: String
 )
 
@@ -175,6 +184,7 @@ fun loadSmartAiInsight(
 
                 val snapshot =
                     SmartAiSnapshot(
+                        profile = profile,
                         currentCgpa = currentCgpa,
                         targetCgpa = targetCgpa,
                         academicEvents = academicEvents,
@@ -211,14 +221,17 @@ private fun generateSmartAiInsight(
 ): SmartAiInsight {
 
     val factors =
-        listOf(
-            technicalSkillsFactor(data),
-            projectsFactor(data),
-            dsaFactor(data),
-            internshipFactor(data),
-            academicsFactor(data),
-            profileEvidenceFactor(data),
-            growthFactor(data)
+        applyRoleAwareWeights(
+            baseFactors = listOf(
+                technicalSkillsFactor(data),
+                projectsFactor(data),
+                dsaFactor(data),
+                internshipFactor(data),
+                academicsFactor(data),
+                profileEvidenceFactor(data),
+                growthFactor(data)
+            ),
+            targetRole = readTargetRole(data.profile)
         )
 
     val observedFactors =
@@ -376,7 +389,7 @@ private fun generateSmartAiInsight(
 
             (
                     factor.weight *
-                            (100f - (factor.score ?: 100f))
+                            (100f - ((factor.score ?: 100f) + factor.trend).coerceIn(0f, 100f))
                     ).toDouble()
         }.toFloat()
 
@@ -387,9 +400,12 @@ private fun generateSmartAiInsight(
                 factor.score
                     ?: return@mapNotNull null
 
+            val adjustedScore =
+                (score + factor.trend).coerceIn(0f, 100f)
+
             val weightedWeakness =
                 factor.weight *
-                        (100f - score)
+                        (100f - adjustedScore)
 
             if (weightedWeakness <= 0f) {
                 null
@@ -407,7 +423,8 @@ private fun generateSmartAiInsight(
                     factor = factor,
                     score = score,
                     weaknessShare = weaknessShare,
-                    weightedWeakness = weightedWeakness
+                    weightedWeakness = weightedWeakness,
+                    trend = factor.trend
                 )
             }
         }
@@ -429,17 +446,117 @@ private fun generateSmartAiInsight(
         )
     }
 
+    val confidence = recommendationConfidence(observedFactors, bestCandidate)
+
     return SmartAiInsight(
         title = bestCandidate.title,
         message =
             "${bestCandidate.message} Overall profile score: $overallScore/100.",
-        reason = bestCandidate.reason,
+        reason = "${bestCandidate.reason} Recommendation confidence: $confidence%.",
         action = bestCandidate.action,
         priority = bestCandidate.priority,
         category = bestCandidate.label.uppercase(Locale.ROOT)
     )
 }
 
+
+// ============================================================
+// v0.3 ROLE-AWARE WEIGHTS
+// ============================================================
+// Base distribution remains exactly 20/20/18/15/12/10/5.
+// If an existing profile role field is available, small multipliers
+// reflect role demand signals and are normalized back to 100%.
+// If no role is available, weights remain exactly the v0.2 baseline.
+// ============================================================
+
+private fun applyRoleAwareWeights(
+    baseFactors: List<FactorScore>,
+    targetRole: String?
+): List<FactorScore> {
+
+    val role = normalize(targetRole)
+    if (role.isBlank()) return baseFactors
+
+    val multipliers = when {
+        containsAny(role, "AI", "ML", "MACHINE LEARNING", "DATA SCIENCE") ->
+            mapOf("SKILLS" to 1.10f, "PROJECTS" to 1.10f, "DSA" to 0.90f, "INTERNSHIPS" to 1.00f, "ACADEMICS" to 0.95f, "EVIDENCE" to 1.00f, "GROWTH" to 0.95f)
+        containsAny(role, "BACKEND", "BACK-END", "SERVER") ->
+            mapOf("SKILLS" to 1.08f, "PROJECTS" to 1.08f, "DSA" to 1.02f, "INTERNSHIPS" to 1.00f, "ACADEMICS" to 0.92f, "EVIDENCE" to 0.95f, "GROWTH" to 0.95f)
+        containsAny(role, "FRONTEND", "FRONT-END", "WEB", "UI") ->
+            mapOf("SKILLS" to 1.10f, "PROJECTS" to 1.12f, "DSA" to 0.90f, "INTERNSHIPS" to 1.00f, "ACADEMICS" to 0.92f, "EVIDENCE" to 0.96f, "GROWTH" to 0.95f)
+        containsAny(role, "DEVOPS", "SRE", "CLOUD", "PLATFORM") ->
+            mapOf("SKILLS" to 1.12f, "PROJECTS" to 1.10f, "DSA" to 0.92f, "INTERNSHIPS" to 1.00f, "ACADEMICS" to 0.90f, "EVIDENCE" to 0.96f, "GROWTH" to 0.96f)
+        containsAny(role, "CYBER", "SECURITY", "INFOSEC") ->
+            mapOf("SKILLS" to 1.12f, "PROJECTS" to 1.10f, "DSA" to 0.92f, "INTERNSHIPS" to 1.02f, "ACADEMICS" to 0.90f, "EVIDENCE" to 1.00f, "GROWTH" to 0.94f)
+        else -> emptyMap()
+    }
+
+    if (multipliers.isEmpty()) return baseFactors
+
+    val adjusted = baseFactors.map { factor ->
+        factor.copy(weight = factor.baseWeight * (multipliers[factor.key] ?: 1f))
+    }
+
+    val total = adjusted.sumOf { it.weight.toDouble() }.toFloat()
+    if (total <= 0f) return baseFactors
+
+    return adjusted.map { it.copy(weight = it.weight / total) }
+}
+
+private fun readTargetRole(profile: DocumentSnapshot): String? {
+    listOf("targetRole", "careerGoal", "desiredRole", "targetCareer", "role").forEach { field ->
+        val value = profile.getString(field)?.trim().orEmpty()
+        if (value.isNotBlank()) return value
+    }
+    return null
+}
+
+private fun containsAny(value: String, vararg terms: String): Boolean =
+    terms.any { value.contains(normalize(it), ignoreCase = true) }
+
+private fun timestampTrend(documents: List<DocumentSnapshot>): Float {
+    val dates = documents.mapNotNull { extractTimestampDate(it) }
+    if (dates.size < 2) return 0f
+    val newest = dates.maxOrNull() ?: return 0f
+    val oldest = dates.minOrNull() ?: return 0f
+    val spanDays = (newest.time - oldest.time) / (24L * 60L * 60L * 1000L)
+    if (spanDays < 7L) return 0f
+    val cutoff = newest.time - (spanDays / 2L) * 24L * 60L * 60L * 1000L
+    val recent = dates.count { it.time >= cutoff }
+    val older = dates.size - recent
+    if (older <= 0) return 0f
+    val ratio = recent.toFloat() / older.toFloat()
+    return when {
+        ratio >= 2.0f -> 8f
+        ratio >= 1.5f -> 5f
+        ratio <= 0.5f -> -8f
+        ratio <= 0.75f -> -5f
+        else -> 0f
+    }
+}
+
+private fun extractTimestampDate(document: DocumentSnapshot): java.util.Date? {
+    val values = listOf(document.get("updatedAt"), document.get("createdAt"), document.get("timestamp"))
+    for (value in values) {
+        when (value) {
+            is com.google.firebase.Timestamp -> return value.toDate()
+            is java.util.Date -> return value
+            is Number -> return java.util.Date(value.toLong())
+            is String -> parseDateTime(value)?.let { return it }
+        }
+    }
+    return null
+}
+
+private fun parseDateTime(value: String): java.util.Date? {
+    val patterns = listOf("yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss.SSS", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd")
+    for (pattern in patterns) {
+        try {
+            return SimpleDateFormat(pattern, Locale.US).apply { isLenient = false }.parse(value)
+        } catch (_: Exception) { }
+    }
+    return null
+}
 
 // ============================================================
 // FACTOR 1 — TECHNICAL SKILLS — 20%
@@ -463,9 +580,11 @@ private fun technicalSkillsFactor(
         return FactorScore(
             key = "SKILLS",
             label = "Technical Skills",
+            baseWeight = 0.20f,
             weight = 0.20f,
             score = null,
             observed = false,
+            trend = 0f,
             reason = "No placement skill ratings are currently recorded."
         )
     }
@@ -482,9 +601,11 @@ private fun technicalSkillsFactor(
     return FactorScore(
         key = "SKILLS",
         label = "Technical Skills",
+        baseWeight = 0.20f,
         weight = 0.20f,
         score = score,
         observed = true,
+        trend = timestampTrend(data.skills),
         reason = "Based on the average of the recorded placement skill ratings."
     )
 }
@@ -503,35 +624,108 @@ private fun projectsFactor(
         return FactorScore(
             key = "PROJECTS",
             label = "Projects",
+            baseWeight = 0.20f,
             weight = 0.20f,
             score = 0f,
             observed = true,
+            trend = 0f,
             reason = "No projects are currently recorded in PRISM."
         )
     }
 
-    val progressValues =
-        data.projects.map {
-            parseFloatOrNull(
-                it.get("progress")
-            )?.coerceIn(
-                0f,
-                100f
-            ) ?: 0f
+    val projectScores =
+        data.projects.map { project ->
+            calculateProjectPracticalScore(project)
         }
 
-    val averageProgress =
-        progressValues.average()
-            .toFloat()
+    val averageProjectScore =
+        projectScores.average().toFloat()
+
+    val analyzedCount =
+        data.projects.count { project ->
+            val evidence = project.get("githubEvidence") as? Map<*, *>
+            evidence?.get("isAccessible") as? Boolean == true
+        }
 
     return FactorScore(
         key = "PROJECTS",
         label = "Projects",
+        baseWeight = 0.20f,
         weight = 0.20f,
-        score = averageProgress,
+        score = averageProjectScore.coerceIn(0f, 100f),
         observed = true,
-        reason = "Based on the recorded progress of the projects."
+        trend = timestampTrend(data.projects),
+        reason = if (analyzedCount > 0) {
+            "Based on project progress/status plus analyzed GitHub repository evidence for $analyzedCount project(s)."
+        } else {
+            "Based on recorded project progress/status. GitHub evidence is used automatically when a repository has been analyzed."
+        }
     )
+}
+
+private fun calculateProjectPracticalScore(
+    project: DocumentSnapshot
+): Float {
+
+    val progress =
+        parseFloatOrNull(project.get("progress"))
+            ?.coerceIn(0f, 100f)
+            ?: when (
+                normalize(project.getString("status"))
+            ) {
+                "COMPLETED" -> 90f
+                "ARCHIVED" -> 90f
+                "ONGOING" -> 60f
+                "PLANNING" -> 30f
+                "IDEA" -> 15f
+                else -> 0f
+            }
+
+    val evidence =
+        project.get("githubEvidence") as? Map<*, *>
+
+    if (evidence == null) {
+        return progress
+    }
+
+    val accessible =
+        evidence["isAccessible"] as? Boolean ?: false
+
+    if (!accessible) {
+        return progress
+    }
+
+    var evidenceScore = 0f
+
+    if (evidence["isValidUrl"] as? Boolean == true) evidenceScore += 10f
+    if (evidence["isPublic"] as? Boolean == true) evidenceScore += 10f
+    if (evidence["hasReadme"] as? Boolean == true) evidenceScore += 5f
+    if (evidence["readmeHasMeaningfulContent"] as? Boolean == true) evidenceScore += 15f
+    if (evidence["sourceContentHasMeaningfulCode"] as? Boolean == true) evidenceScore += 25f
+
+    val sourceSamples =
+        (evidence["sourceContentSampleCount"] as? Number)?.toInt() ?: 0
+    if (sourceSamples > 0) evidenceScore += 10f
+
+    val sourceFiles =
+        (evidence["sourceFileCount"] as? Number)?.toInt() ?: 0
+    if (sourceFiles > 0) evidenceScore += 5f
+
+    val commits =
+        (evidence["recentCommitSampleSize"] as? Number)?.toInt() ?: 0
+    if (commits > 0) evidenceScore += 10f
+
+    val languages =
+        (evidence["languageCount"] as? Number)?.toInt() ?: 0
+    if (languages > 0) evidenceScore += 5f
+
+    // GitHub evidence is supporting practical evidence, not a
+    // standalone hiring score. It is blended 50/50 with project
+    // progress/status so a URL cannot dominate the model.
+    return (
+            progress * 0.50f +
+                    evidenceScore.coerceIn(0f, 100f) * 0.50f
+            ).coerceIn(0f, 100f)
 }
 
 
@@ -548,9 +742,11 @@ private fun dsaFactor(
         return FactorScore(
             key = "DSA",
             label = "DSA",
+            baseWeight = 0.18f,
             weight = 0.18f,
             score = 0f,
             observed = true,
+            trend = 0f,
             reason = "No solved DSA problems are currently recorded."
         )
     }
@@ -588,9 +784,11 @@ private fun dsaFactor(
     return FactorScore(
         key = "DSA",
         label = "DSA",
+        baseWeight = 0.18f,
         weight = 0.18f,
         score = score,
         observed = true,
+        trend = timestampTrend(data.dsaProblems),
         reason = "Based on the recorded DSA scores, difficulty and topic weighting."
     )
 }
@@ -609,9 +807,11 @@ private fun internshipFactor(
         return FactorScore(
             key = "INTERNSHIPS",
             label = "Internships",
+            baseWeight = 0.15f,
             weight = 0.15f,
             score = 0f,
             observed = true,
+            trend = 0f,
             reason = "No internship records are currently recorded in PRISM."
         )
     }
@@ -669,9 +869,11 @@ private fun internshipFactor(
     return FactorScore(
         key = "INTERNSHIPS",
         label = "Internships",
+        baseWeight = 0.15f,
         weight = 0.15f,
         score = score,
         observed = true,
+        trend = timestampTrend(data.internships),
         reason = "Based on recorded applications, interview-stage progress and selections."
     )
 }
@@ -696,9 +898,11 @@ private fun academicsFactor(
         return FactorScore(
             key = "ACADEMICS",
             label = "Academics",
+            baseWeight = 0.12f,
             weight = 0.12f,
             score = null,
             observed = false,
+            trend = 0f,
             reason = "Current CGPA is not recorded."
         )
     }
@@ -714,9 +918,11 @@ private fun academicsFactor(
     return FactorScore(
         key = "ACADEMICS",
         label = "Academics",
+        baseWeight = 0.12f,
         weight = 0.12f,
         score = score,
         observed = true,
+        trend = 0f,
         reason = "Based on current CGPA. Target CGPA is contextual information, not a fixed priority score."
     )
 }
@@ -750,9 +956,11 @@ private fun profileEvidenceFactor(
         return FactorScore(
             key = "EVIDENCE",
             label = "Achievements & Learning",
+            baseWeight = 0.10f,
             weight = 0.10f,
             score = 0f,
             observed = true,
+            trend = 0f,
             reason = "No achievements, certifications or learning records are currently recorded."
         )
     }
@@ -780,9 +988,11 @@ private fun profileEvidenceFactor(
     return FactorScore(
         key = "EVIDENCE",
         label = "Achievements & Learning",
+        baseWeight = 0.10f,
         weight = 0.10f,
         score = score,
         observed = true,
+        trend = timestampTrend(data.achievements + data.certifications + data.learning),
         reason = "Based on recorded achievements, certifications and additional learning."
     )
 }
@@ -808,9 +1018,11 @@ private fun growthFactor(
         return FactorScore(
             key = "GROWTH",
             label = "Growth",
+            baseWeight = 0.05f,
             weight = 0.05f,
             score = null,
             observed = false,
+            trend = 0f,
             reason = "Existing Growth data could not be calculated."
         )
     }
@@ -818,9 +1030,11 @@ private fun growthFactor(
     return FactorScore(
         key = "GROWTH",
         label = "Growth",
+        baseWeight = 0.05f,
         weight = 0.05f,
         score = growth.toFloat(),
         observed = true,
+        trend = 0f,
         reason = "Uses PRISM's existing Growth score as a small consistency signal."
     )
 }
@@ -834,7 +1048,8 @@ private fun buildCandidate(
     factor: FactorScore,
     score: Float,
     weaknessShare: Float,
-    weightedWeakness: Float
+    weightedWeakness: Float,
+    trend: Float = 0f
 ): Candidate {
 
     val roundedScore =
@@ -843,7 +1058,8 @@ private fun buildCandidate(
     val priority =
         priorityFromWeakness(
             share = weaknessShare,
-            score = score
+            score = score,
+            trend = trend
         )
 
     return when (factor.key) {
@@ -945,6 +1161,26 @@ private fun buildCandidate(
 
 
 // ============================================================
+// RECOMMENDATION CONFIDENCE
+// ============================================================
+
+private fun recommendationConfidence(
+    factors: List<FactorScore>,
+    candidate: Candidate
+): Int {
+    val coverage = factors.size / 7f * 100f
+    val totalWeakness = factors.sumOf {
+        (it.weight * (100f - (it.score ?: 100f))).toDouble()
+    }.toFloat()
+    val share = if (totalWeakness > 0f) {
+        candidate.weightedWeakness / totalWeakness
+    } else 0f
+    return (coverage * 0.45f + share * 100f * 0.55f)
+        .roundToInt()
+        .coerceIn(50, 95)
+}
+
+// ============================================================
 // PRIORITY
 // ============================================================
 //
@@ -960,7 +1196,8 @@ private fun buildCandidate(
 
 private fun priorityFromWeakness(
     share: Float,
-    score: Float
+    score: Float,
+    trend: Float = 0f
 ): Int {
 
     val shareComponent =
@@ -972,14 +1209,23 @@ private fun priorityFromWeakness(
     val weaknessComponent =
         (100f - score.coerceIn(0f, 100f))
 
+    val trendUrgency = when {
+        trend <= -10f -> 7f
+        trend <= -5f -> 4f
+        trend >= 10f -> -4f
+        trend >= 5f -> -2f
+        else -> 0f
+    }
+
     return (
-            shareComponent * 0.65f +
-                    weaknessComponent * 0.35f
+            shareComponent * 0.55f +
+                    weaknessComponent * 0.35f +
+                    trendUrgency
             )
         .roundToInt()
         .coerceIn(
             35,
-            88
+            90
         )
 }
 

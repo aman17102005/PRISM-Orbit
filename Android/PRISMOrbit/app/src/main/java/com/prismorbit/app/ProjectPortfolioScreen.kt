@@ -1,6 +1,6 @@
-
 package com.prismorbit.app
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.UUID
 
@@ -57,6 +58,8 @@ data class FirebaseProjectItem(
     val codingLanguage: String = "",
     val status: String = "ONGOING",
     val completionDate: String = "",
+    val githubUrl: String = "",
+    val githubEvidence: Map<String, Any?> = emptyMap(),
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -66,6 +69,7 @@ private val ProjectTextSecondary = Color(0xFF92929C)
 private val ProjectGreen = Color(0xFF5BE27C)
 private val ProjectOrange = Color(0xFFFFB84D)
 private val ProjectRed = Color(0xFFFF6868)
+private const val PRISM_GITHUB_TAG = "PRISM_GITHUB"
 
 private val projectStatuses = listOf(
     "IDEA",
@@ -93,8 +97,39 @@ private fun FirebaseProjectItem.toFirestoreMap(): Map<String, Any> {
         "codingLanguage" to codingLanguage,
         "status" to status,
         "completionDate" to completionDate,
+        "githubUrl" to githubUrl.trim(),
+        "githubEvidence" to githubEvidence,
         "createdAt" to createdAt,
         "updatedAt" to updatedAt
+    )
+}
+
+private fun GitHubRepositoryEvidence.toFirestoreMap(): Map<String, Any?> {
+    return mapOf(
+        "isValidUrl" to isValidUrl,
+        "isPublic" to isPublic,
+        "isAccessible" to isAccessible,
+        "owner" to owner,
+        "repository" to repository,
+        "description" to description,
+        "defaultBranch" to defaultBranch,
+        "stars" to stars,
+        "forks" to forks,
+        "hasReadme" to hasReadme,
+        "totalFileCount" to totalFileCount,
+        "sourceFileCount" to sourceFileCount,
+        "recentCommitSampleSize" to recentCommitSampleSize,
+        "languageCount" to languageCount,
+        "languages" to languages,
+        "pushedAt" to pushedAt,
+        "readmeContentLength" to readmeContentLength,
+        "readmeHasMeaningfulContent" to readmeHasMeaningfulContent,
+        "sourceContentSampleCount" to sourceContentSampleCount,
+        "sourceContentNonEmptyCount" to sourceContentNonEmptyCount,
+        "sourceContentCharacters" to sourceContentCharacters,
+        "sourceContentHasMeaningfulCode" to sourceContentHasMeaningfulCode,
+        "sampledSourceFiles" to sampledSourceFiles,
+        "errorMessage" to errorMessage
     )
 }
 
@@ -109,6 +144,12 @@ private fun firestoreMapToProject(
         codingLanguage = data["codingLanguage"] as? String ?: "",
         status = data["status"] as? String ?: "ONGOING",
         completionDate = data["completionDate"] as? String ?: "",
+        githubUrl = data["githubUrl"] as? String ?: "",
+        githubEvidence = (data["githubEvidence"] as? Map<*, *>)
+            ?.mapNotNull { (key, value) ->
+                (key as? String)?.let { it to value }
+            }?.toMap()
+            ?: emptyMap(),
         createdAt = (data["createdAt"] as? Number)?.toLong()
             ?: System.currentTimeMillis(),
         updatedAt = (data["updatedAt"] as? Number)?.toLong()
@@ -123,6 +164,7 @@ fun ProjectsScreen(
     val auth = remember { FirebaseAuth.getInstance() }
     val firestore = remember { FirebaseFirestore.getInstance() }
     val currentUser = auth.currentUser
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     val projects = remember {
         mutableStateListOf<FirebaseProjectItem>()
@@ -180,7 +222,11 @@ fun ProjectsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onBack) {
-                    Text("←", color = MaterialTheme.colorScheme.onSurface, fontSize = 28.sp)
+                    Text(
+                        "←",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 28.sp
+                    )
                 }
 
                 Spacer(Modifier.width(4.dp))
@@ -193,6 +239,7 @@ fun ProjectsScreen(
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 1.sp
                     )
+
                     Text(
                         "${projects.size} saved projects",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -232,6 +279,7 @@ fun ProjectsScreen(
                         modifier = Modifier.padding(15.dp)
                     )
                 }
+
                 Spacer(Modifier.height(12.dp))
             }
 
@@ -306,6 +354,7 @@ fun ProjectsScreen(
                     val cleanDescription = project.description.trim()
                     val cleanMajorTopic = project.majorTopic.trim()
                     val cleanLanguage = project.codingLanguage.trim()
+                    val cleanGithubUrl = project.githubUrl.trim()
 
                     when {
                         cleanName.isBlank() -> {
@@ -347,56 +396,150 @@ fun ProjectsScreen(
                                 isSaving = true
                                 errorMessage = ""
 
-                                val projectToSave = project.copy(
-                                    name = cleanName,
-                                    description = cleanDescription,
-                                    majorTopic = cleanMajorTopic,
-                                    codingLanguage = cleanLanguage,
-                                    completionDate =
-                                        if (project.status == "COMPLETED") {
-                                            project.completionDate.trim()
-                                        } else {
-                                            ""
-                                        },
-                                    updatedAt = System.currentTimeMillis()
-                                )
-
-                                projectsCollection(firestore, uid)
-                                    .document(projectToSave.id)
-                                    .set(
-                                        projectToSave.toFirestoreMap(),
-                                        SetOptions.merge()
+                                scope.launch {
+                                    Log.d(
+                                        PRISM_GITHUB_TAG,
+                                        "SAVE BUTTON FLOW ENTERED"
                                     )
-                                    .addOnSuccessListener {
-                                        val index = projects.indexOfFirst {
-                                            it.id == projectToSave.id
-                                        }
 
-                                        if (index >= 0) {
-                                            projects[index] = projectToSave
-                                        } else {
-                                            projects.add(0, projectToSave)
-                                        }
+                                    try {
+                                        Log.d(
+                                            PRISM_GITHUB_TAG,
+                                            "Project data prepared. name=$cleanName, githubUrl=$cleanGithubUrl"
+                                        )
 
-                                        val sorted =
-                                            projects.sortedByDescending {
-                                                it.createdAt
+                                        val githubEvidence =
+                                            if (cleanGithubUrl.isBlank()) {
+                                                Log.d(
+                                                    PRISM_GITHUB_TAG,
+                                                    "GitHub URL is blank. Skipping GitHub analysis."
+                                                )
+                                                emptyMap()
+                                            } else {
+                                                Log.d(
+                                                    PRISM_GITHUB_TAG,
+                                                    "CALLING GitHubAnalyzer.analyzeRepository()"
+                                                )
+
+                                                val evidence =
+                                                    GitHubAnalyzer
+                                                        .analyzeRepository(cleanGithubUrl)
+
+                                                Log.d(
+                                                    PRISM_GITHUB_TAG,
+                                                    "GitHubAnalyzer RETURNED: valid=${evidence.isValidUrl}, " +
+                                                            "public=${evidence.isPublic}, accessible=${evidence.isAccessible}, " +
+                                                            "repo=${evidence.repository}, totalFiles=${evidence.totalFileCount}, " +
+                                                            "sourceFiles=${evidence.sourceFileCount}, languages=${evidence.languages}, " +
+                                                            "readmeChars=${evidence.readmeContentLength}, " +
+                                                            "sourceSamples=${evidence.sourceContentSampleCount}, " +
+                                                            "sourceChars=${evidence.sourceContentCharacters}"
+                                                )
+
+                                                if (!evidence.errorMessage.isNullOrBlank()) {
+                                                    Log.e(
+                                                        PRISM_GITHUB_TAG,
+                                                        "GitHubAnalyzer ERROR: ${evidence.errorMessage}"
+                                                    )
+                                                }
+
+                                                evidence.toFirestoreMap()
                                             }
 
-                                        projects.clear()
-                                        projects.addAll(sorted)
+                                        Log.d(
+                                            PRISM_GITHUB_TAG,
+                                            "BUILDING projectToSave. githubEvidencePresent=${githubEvidence.isNotEmpty()}"
+                                        )
 
-                                        isSaving = false
-                                        showEditor = false
-                                        editingProject = null
-                                        errorMessage = ""
-                                    }
-                                    .addOnFailureListener { exception ->
+                                        val projectToSave = project.copy(
+                                            name = cleanName,
+                                            description = cleanDescription,
+                                            majorTopic = cleanMajorTopic,
+                                            codingLanguage = cleanLanguage,
+                                            githubUrl = cleanGithubUrl,
+                                            githubEvidence = githubEvidence,
+                                            completionDate =
+                                                if (project.status == "COMPLETED") {
+                                                    project.completionDate.trim()
+                                                } else {
+                                                    ""
+                                                },
+                                            updatedAt = System.currentTimeMillis()
+                                        )
+
+                                        projectsCollection(firestore, uid)
+                                            .document(projectToSave.id)
+                                            .set(
+                                                projectToSave.toFirestoreMap(),
+                                                SetOptions.merge()
+                                            )
+                                            .addOnSuccessListener {
+                                                Log.d(
+                                                    PRISM_GITHUB_TAG,
+                                                    "FIRESTORE SAVE SUCCESS: projectId=${projectToSave.id}"
+                                                )
+
+                                                val index = projects.indexOfFirst {
+                                                    it.id == projectToSave.id
+                                                }
+
+                                                if (index >= 0) {
+                                                    projects[index] = projectToSave
+                                                } else {
+                                                    projects.add(0, projectToSave)
+                                                }
+
+                                                val sorted =
+                                                    projects.sortedByDescending {
+                                                        it.createdAt
+                                                    }
+
+                                                projects.clear()
+                                                projects.addAll(sorted)
+
+                                                isSaving = false
+                                                showEditor = false
+                                                editingProject = null
+
+                                                val githubError =
+                                                    projectToSave.githubEvidence["errorMessage"]
+                                                            as? String
+
+                                                errorMessage =
+                                                    if (cleanGithubUrl.isNotBlank() &&
+                                                        !githubError.isNullOrBlank()
+                                                    ) {
+                                                        "Project saved, but GitHub could not be analyzed: $githubError"
+                                                    } else {
+                                                        ""
+                                                    }
+                                            }
+                                            .addOnFailureListener { exception ->
+                                                Log.e(
+                                                    PRISM_GITHUB_TAG,
+                                                    "FIRESTORE SAVE FAILED",
+                                                    exception
+                                                )
+
+                                                isSaving = false
+                                                errorMessage =
+                                                    exception.message
+                                                        ?: "Unable to save project."
+                                            }
+
+                                    } catch (exception: Exception) {
+                                        Log.e(
+                                            PRISM_GITHUB_TAG,
+                                            "SAVE FLOW EXCEPTION",
+                                            exception
+                                        )
+
                                         isSaving = false
                                         errorMessage =
                                             exception.message
-                                                ?: "Unable to save project."
+                                                ?: "Unable to analyze GitHub repository."
                                     }
+                                }
                             }
                         }
                     }
@@ -433,6 +576,7 @@ fun ProjectsScreen(
                                         projects.removeAll {
                                             it.id == project.id
                                         }
+
                                         deletingProject = null
                                         errorMessage = ""
                                     }
@@ -575,6 +719,25 @@ private fun ProjectCard(
                 ProjectStatusChip(project.status)
             }
 
+            if (project.githubEvidence.isNotEmpty()) {
+                val githubAccessible =
+                    project.githubEvidence["isAccessible"] as? Boolean ?: false
+                val sourceFiles =
+                    (project.githubEvidence["sourceFileCount"] as? Number)?.toInt() ?: 0
+
+                Spacer(Modifier.height(10.dp))
+
+                Text(
+                    if (githubAccessible) {
+                        "GitHub analyzed • $sourceFiles source files detected"
+                    } else {
+                        "GitHub analysis unavailable"
+                    },
+                    color = if (githubAccessible) ProjectGreen else ProjectOrange,
+                    fontSize = 10.sp
+                )
+            }
+
             if (project.completionDate.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
 
@@ -584,7 +747,6 @@ private fun ProjectCard(
                     fontSize = 11.sp
                 )
             }
-
         }
     }
 }
@@ -666,6 +828,10 @@ private fun ProjectEditor(
 
     var codingLanguage by remember(initialProject?.id) {
         mutableStateOf(initialProject?.codingLanguage ?: "")
+    }
+
+    var githubUrl by remember(initialProject?.id) {
+        mutableStateOf(initialProject?.githubUrl ?: "")
     }
 
     var status by remember(initialProject?.id) {
@@ -790,6 +956,22 @@ private fun ProjectEditor(
             }
 
             item {
+                OutlinedTextField(
+                    value = githubUrl,
+                    onValueChange = { githubUrl = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = {
+                        Text("GitHub Repository URL (Optional)")
+                    },
+                    placeholder = {
+                        Text("https://github.com/username/repository")
+                    },
+                    singleLine = true,
+                    enabled = !saving
+                )
+            }
+
+            item {
                 Box(Modifier.fillMaxWidth()) {
 
                     OutlinedTextField(
@@ -873,6 +1055,7 @@ private fun ProjectEditor(
                                     } else {
                                         ""
                                     },
+                                githubUrl = githubUrl,
                                 createdAt =
                                     existing?.createdAt
                                         ?: System.currentTimeMillis(),
@@ -913,4 +1096,3 @@ private fun ProjectEditor(
         }
     }
 }
-
