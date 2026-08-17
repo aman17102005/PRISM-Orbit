@@ -1,4 +1,3 @@
-
 package com.prismorbit.app
 
 import android.content.Intent
@@ -321,17 +320,54 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "‹",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 38.sp,
-                modifier = Modifier.clickable { onBack() }
-            )
-            Spacer(modifier = Modifier.size(10.dp))
-            Column {
-                Text("SETTINGS", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
-                Text("PRISM CONTROL CENTER", color = Color(0xFFB76CFF), fontSize = 8.sp, letterSpacing = 1.8.sp)
+            Card(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clickable { onBack() },
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "‹",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Light
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.size(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "SETTINGS",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "PRISM CONTROL CENTER",
+                    color = Color(0xFFB76CFF),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.8.sp
+                )
+            }
+
+            Text(
+                "SECURE",
+                color = Color(0xFF65E572),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.1.sp
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -386,9 +422,17 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(18.dp))
         SettingsSectionTitle("APPEARANCE")
         SettingsCard {
-            Text("Choose your preferred appearance", color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp)
+            Text(
+                "Choose your preferred appearance",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
             Spacer(modifier = Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 listOf("DARK", "LIGHT", "SYSTEM").forEach { option ->
                     OutlinedButton(
                         onClick = {
@@ -396,9 +440,14 @@ fun SettingsScreen(
                             PrismAppearanceState.mode = option
                             savePreferences()
                         },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text(option, fontSize = 9.sp)
+                        Text(
+                            option,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -431,9 +480,18 @@ fun SettingsScreen(
         SettingsCard {
             Button(
                 onClick = onLogout,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF24242B))
-            ) { Text("LOG OUT") }
+            ) {
+                Text(
+                    "LOG OUT",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                )
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -457,9 +515,16 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
             Button(
                 onClick = { exportLauncher.launch("PRISMOrbit_Data_Export.txt") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Text("EXPORT MY DATA")
+                Text(
+                    "EXPORT MY DATA",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                )
             }
         }
 

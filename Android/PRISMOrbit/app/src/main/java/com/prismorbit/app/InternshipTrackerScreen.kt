@@ -346,45 +346,71 @@ fun InternshipTrackerScreen(
                 contentPadding = PaddingValues(
                     start = 20.dp,
                     end = 20.dp,
-                    top = 18.dp,
+                    top = 20.dp,
                     bottom = 40.dp
                 ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = onBack) {
-                            Text("‹", color = MaterialTheme.colorScheme.onSurface, fontSize = 34.sp)
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.surface,
+                                    RoundedCornerShape(13.dp)
+                                )
+                                .clickable(onClick = onBack),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "‹",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Light
+                            )
                         }
+
+                        Spacer(Modifier.width(12.dp))
 
                         Column(Modifier.weight(1f)) {
                             Text(
                                 "INTERNSHIPS",
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 25.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.2.sp
                             )
+                            Spacer(Modifier.height(2.dp))
                             Text(
                                 "APPLY • INTERVIEW • GROW",
                                 color = Color(0xFFFFD23F),
                                 fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.7.sp
                             )
                         }
 
-                        TextButton(
-                            onClick = {
-                                editorProject = null
-                                errorMessage = ""
-                                showEditor = true
-                            }
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    Color(0xFF2A2417),
+                                    RoundedCornerShape(11.dp)
+                                )
+                                .clickable {
+                                    editorProject = null
+                                    errorMessage = ""
+                                    showEditor = true
+                                }
+                                .padding(horizontal = 11.dp, vertical = 9.dp)
                         ) {
                             Text(
                                 "+ ADD",
                                 color = Color(0xFFFFD23F),
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -394,6 +420,7 @@ fun InternshipTrackerScreen(
                 if (errorMessage.isNotBlank()) {
                     item {
                         Card(
+                            shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = Color(0xFF241416)
                             )
@@ -401,6 +428,7 @@ fun InternshipTrackerScreen(
                             Text(
                                 errorMessage,
                                 color = Color(0xFFFF6B6B),
+                                fontSize = 10.sp,
                                 modifier = Modifier.padding(15.dp)
                             )
                         }
@@ -412,10 +440,12 @@ fun InternshipTrackerScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(160.dp),
+                                .height(190.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator()
+                            CircularProgressIndicator(
+                                color = Color(0xFFFFD23F)
+                            )
                         }
                     }
                 } else {
@@ -424,9 +454,19 @@ fun InternshipTrackerScreen(
                     }
 
                     item {
+                        Text(
+                            "APPLICATION OVERVIEW",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.6.sp
+                        )
+                    }
+
+                    item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(9.dp)
                         ) {
                             StatCard(
                                 Modifier.weight(1f),
@@ -449,7 +489,7 @@ fun InternshipTrackerScreen(
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(9.dp)
                         ) {
                             StatCard(
                                 Modifier.weight(1f),
@@ -480,18 +520,41 @@ fun InternshipTrackerScreen(
                     }
 
                     item {
-                        Text(
-                            "YOUR APPLICATIONS",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.5.sp
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    "YOUR APPLICATIONS",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.5.sp
+                                )
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    "Track every opportunity from interest to outcome.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 9.sp
+                                )
+                            }
+
+                            Text(
+                                "${internships.size} TOTAL",
+                                color = Color(0xFFFFD23F),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.9.sp
+                            )
+                        }
                     }
 
                     if (internships.isEmpty()) {
                         item {
                             Card(
+                                modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surface
                                 ),
@@ -501,13 +564,16 @@ fun InternshipTrackerScreen(
                                     Text(
                                         "NO APPLICATIONS YET",
                                         color = MaterialTheme.colorScheme.onSurface,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        letterSpacing = 0.7.sp
                                     )
-                                    Spacer(Modifier.height(6.dp))
+                                    Spacer(Modifier.height(7.dp))
                                     Text(
-                                        "Add your first internship application.",
+                                        "Add your first internship application to start building your career pipeline.",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 11.sp
+                                        fontSize = 10.sp,
+                                        lineHeight = 15.sp
                                     )
                                 }
                             }
@@ -603,40 +669,65 @@ private fun InternshipProfileCard(score: Int) {
         shape = RoundedCornerShape(24.dp)
     ) {
         Column(Modifier.padding(20.dp)) {
-            Text(
-                "INTERNSHIP PROFILE STRENGTH",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp
-            )
-            Spacer(Modifier.height(7.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "INTERNSHIP PROFILE",
+                        color = Color(0xFFFFD23F),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.7.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Strength of your internship evidence",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp
+                    )
+                }
+
+                Text(
+                    label,
+                    color = Color(0xFFFFD23F),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.9.sp
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom
             ) {
                 Text(
-                    "$score / 100",
+                    "$score",
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 34.sp,
+                    fontSize = 36.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    label,
-                    color = Color(0xFFFFD23F),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
+                    "/ 100",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(bottom = 6.dp)
                 )
             }
-            Spacer(Modifier.height(10.dp))
-            LinearProgress(score / 100f)
+
+            Spacer(Modifier.height(9.dp))
+            InternshipProgressBar(score / 100f)
         }
     }
 }
 
 @Composable
-private fun LinearProgress(value: Float) {
+private fun InternshipProgressBar(value: Float) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -669,24 +760,25 @@ private fun StatCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(17.dp)
     ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(12.dp)
+                .padding(13.dp)
         ) {
             Text(
                 title,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 7.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp
             )
-            Spacer(Modifier.height(5.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 value,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 19.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -702,18 +794,38 @@ private fun PipelineCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(22.dp)
     ) {
-        Column(Modifier.padding(17.dp)) {
-            Text(
-                "APPLICATION PIPELINE",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.4.sp
-            )
+        Column(Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        "APPLICATION PIPELINE",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.4.sp
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "Where your current applications stand.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp
+                    )
+                }
 
-            Spacer(Modifier.height(12.dp))
+                Text(
+                    internships.size.toString(),
+                    color = Color(0xFFFFD23F),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(13.dp))
 
             internshipStatuses.forEach { status ->
                 val count = internships.count { it.status == status }
@@ -721,18 +833,36 @@ private fun PipelineCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .padding(vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(
+                                when (status) {
+                                    "SELECTED" -> Color(0xFF65E572)
+                                    "REJECTED" -> Color(0xFFFF7B72)
+                                    "INTERVIEW" -> Color(0xFF00D9FF)
+                                    else -> Color(0xFFFFD23F)
+                                },
+                                RoundedCornerShape(50.dp)
+                            )
+                    )
+
+                    Spacer(Modifier.width(9.dp))
+
                     Text(
                         status,
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 10.sp
+                        fontSize = 9.sp,
+                        modifier = Modifier.weight(1f)
                     )
+
                     Text(
                         count.toString(),
-                        color = Color(0xFFFFD23F),
-                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -750,36 +880,52 @@ private fun FollowUpCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(22.dp)
     ) {
-        Column(Modifier.padding(17.dp)) {
+        Column(Modifier.padding(18.dp)) {
             Text(
                 "UPCOMING FOLLOW-UPS",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color(0xFFFFD23F),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.4.sp
             )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Keep the next action visible.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp
+            )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(9.dp))
 
             internships.forEach {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 5.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "${it.company} • ${it.status}",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 10.sp,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            it.company,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            it.status,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 8.sp
+                        )
+                    }
+
                     Text(
                         it.followUpDate,
                         color = Color(0xFFFFD23F),
-                        fontSize = 10.sp
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -811,19 +957,18 @@ private fun InternshipCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(21.dp)
     ) {
         Column(Modifier.padding(17.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         internship.company,
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(3.dp))
@@ -835,75 +980,99 @@ private fun InternshipCard(
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        internship.status,
-                        color = statusColor,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(3.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                statusColor.copy(alpha = 0.12f),
+                                RoundedCornerShape(9.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            internship.status,
+                            color = statusColor,
+                            fontSize = 7.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.7.sp
+                        )
+                    }
+
+                    Spacer(Modifier.height(5.dp))
+
                     Text(
                         internship.priority,
                         color = priorityColor,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.7.sp
                     )
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(11.dp))
 
             if (internship.applicationDate.isNotBlank()) {
-                Text(
-                    "Applied: ${internship.applicationDate}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp
-                )
+                InternshipDetailLine("Applied", internship.applicationDate)
             }
 
             if (internship.duration.isNotBlank()) {
-                Text(
-                    "Duration: ${internship.duration}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp
-                )
+                InternshipDetailLine("Duration", internship.duration)
             }
 
             if (internship.technicalSkillsUsed.isNotBlank()) {
-                Text(
-                    "Technical Skills: ${internship.technicalSkillsUsed}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                InternshipDetailLine(
+                    "Technical Skills",
+                    internship.technicalSkillsUsed,
+                    maxLines = 2
                 )
             }
 
             if (internship.responsibilities.isNotBlank()) {
-                Text(
-                    "Work Done: ${internship.responsibilities}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp,
-                    lineHeight = 14.sp,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
+                InternshipDetailLine(
+                    "Work Done",
+                    internship.responsibilities,
+                    maxLines = 3
                 )
             }
 
             if (internship.problemSolved.isNotBlank()) {
-                Text(
-                    "Problem Solved: ${internship.problemSolved}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp,
-                    lineHeight = 14.sp,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
+                InternshipDetailLine(
+                    "Problem Solved",
+                    internship.problemSolved,
+                    maxLines = 3
                 )
             }
 
             if (internship.outcomeImpact.isNotBlank()) {
+                InternshipDetailLine(
+                    "Outcome / Impact",
+                    internship.outcomeImpact,
+                    maxLines = 3
+                )
+            }
+
+            InternshipDetailLine("Stipend", internship.stipend)
+
+            if (internship.interviewDate.isNotBlank()) {
+                InternshipDetailLine("Interview", internship.interviewDate)
+            }
+
+            if (internship.offerDate.isNotBlank()) {
+                InternshipDetailLine("Offer", internship.offerDate)
+            }
+
+            if (internship.followUpDate.isNotBlank()) {
+                InternshipDetailLine(
+                    "Follow-up",
+                    internship.followUpDate,
+                    accent = Color(0xFFFFD23F)
+                )
+            }
+
+            if (internship.notes.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    "Outcome / Impact: ${internship.outcomeImpact}",
+                    internship.notes,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 9.sp,
                     lineHeight = 14.sp,
@@ -911,75 +1080,62 @@ private fun InternshipCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(
-                "Stipend: ${internship.stipend}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 9.sp
-            )
-        }
 
-        if (internship.interviewDate.isNotBlank()) {
-            Text(
-                "Interview: ${internship.interviewDate}",
-                color = Color(0xFF00D9FF),
-                fontSize = 9.sp
-            )
-        }
+            Spacer(Modifier.height(12.dp))
 
-        if (internship.offerDate.isNotBlank()) {
-            Text(
-                "Offer: ${internship.offerDate}",
-                color = Color(0xFF65E572),
-                fontSize = 9.sp
-            )
-        }
-
-        if (internship.followUpDate.isNotBlank()) {
-            Text(
-                "Follow-up: ${internship.followUpDate}",
-                color = Color(0xFFFFD23F),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        if (internship.notes.isNotBlank()) {
-            Spacer(Modifier.height(7.dp))
-            Text(
-                internship.notes,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 9.sp,
-                lineHeight = 14.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            OutlinedButton(
-                onClick = onEdit,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("EDIT", fontSize = 9.sp)
-            }
+                OutlinedButton(
+                    onClick = onEdit,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("EDIT", fontSize = 9.sp)
+                }
 
-            OutlinedButton(
-                onClick = onDelete,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("DELETE", fontSize = 9.sp)
+                OutlinedButton(
+                    onClick = onDelete,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("DELETE", fontSize = 9.sp)
+                }
             }
         }
     }
 }
 
+@Composable
+private fun InternshipDetailLine(
+    label: String,
+    value: String,
+    maxLines: Int = 1,
+    accent: Color = MaterialTheme.colorScheme.onSurfaceVariant
+) {
+    if (value.isBlank()) return
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+    ) {
+        Text(
+            "$label: ",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            value,
+            color = accent,
+            fontSize = 9.sp,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
 
 @Composable
 private fun InternshipEditor(
@@ -1047,7 +1203,7 @@ private fun InternshipEditor(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(20.dp),
+            .padding(horizontal = 20.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
@@ -1055,12 +1211,25 @@ private fun InternshipEditor(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(
-                    onClick = onBack,
-                    enabled = !saving
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surface,
+                            RoundedCornerShape(13.dp)
+                        )
+                        .clickable(enabled = !saving, onClick = onBack),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text("‹", color = MaterialTheme.colorScheme.onSurface, fontSize = 34.sp)
+                    Text(
+                        "‹",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Light
+                    )
                 }
+
+                Spacer(Modifier.width(12.dp))
 
                 Column {
                     Text(
@@ -1070,14 +1239,26 @@ private fun InternshipEditor(
                         fontSize = 24.sp,
                         fontWeight = FontWeight.SemiBold
                     )
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         "INTERNSHIP TRACKER",
                         color = Color(0xFFFFD23F),
                         fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
                         letterSpacing = 1.5.sp
                     )
                 }
             }
+        }
+
+        item {
+            Text(
+                "ROLE & COMPANY",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.4.sp
+            )
         }
 
         item {
@@ -1112,6 +1293,26 @@ private fun InternshipEditor(
                 label = { Text("Duration") },
                 placeholder = { Text("3 months, 6 months...") },
                 singleLine = true
+            )
+        }
+
+        item {
+            OutlinedTextField(
+                value = location,
+                onValueChange = { location = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Location") },
+                singleLine = true
+            )
+        }
+
+        item {
+            Text(
+                "EXPERIENCE EVIDENCE",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.4.sp
             )
         }
 
@@ -1156,6 +1357,16 @@ private fun InternshipEditor(
                 label = { Text("Outcome / Impact") },
                 placeholder = { Text("What was the result or impact?") },
                 minLines = 3
+            )
+        }
+
+        item {
+            Text(
+                "TIMELINE",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.4.sp
             )
         }
 
@@ -1217,8 +1428,9 @@ private fun InternshipEditor(
             Text(
                 "APPLICATION STATUS",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.4.sp
             )
         }
 
@@ -1231,12 +1443,13 @@ private fun InternshipEditor(
         }
 
         item {
-            Spacer(Modifier.height(5.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
                 "PRIORITY",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.4.sp
             )
         }
 
@@ -1245,6 +1458,16 @@ private fun InternshipEditor(
                 text = option,
                 selected = priority == option,
                 onClick = { priority = option }
+            )
+        }
+
+        item {
+            Text(
+                "LINK & NOTES",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.4.sp
             )
         }
 
@@ -1273,11 +1496,19 @@ private fun InternshipEditor(
 
         if (error.isNotBlank()) {
             item {
-                Text(
-                    error,
-                    color = Color(0xFFFF6B6B),
-                    fontSize = 10.sp
-                )
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF241416)
+                    )
+                ) {
+                    Text(
+                        error,
+                        color = Color(0xFFFF6B6B),
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(13.dp)
+                    )
+                }
             }
         }
 
@@ -1316,7 +1547,9 @@ private fun InternshipEditor(
                     )
                 },
                 enabled = !saving,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFB28A2E)
                 ),
@@ -1327,6 +1560,10 @@ private fun InternshipEditor(
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+
+        item {
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
@@ -1340,7 +1577,7 @@ private fun ChoiceRow(
     OutlinedButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(13.dp),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = if (selected) Color(0xFF211A2D)
             else Color.Transparent
@@ -1348,17 +1585,19 @@ private fun ChoiceRow(
     ) {
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text,
                 color = if (selected) Color(0xFFFFD23F)
-                else Color.White,
+                else MaterialTheme.colorScheme.onSurface,
                 fontWeight = if (selected) FontWeight.Bold
-                else FontWeight.Normal
+                else FontWeight.Normal,
+                fontSize = 10.sp
             )
             if (selected) {
-                Text("✓", color = Color(0xFF65E572))
+                Text("✓", color = Color(0xFF65E572), fontWeight = FontWeight.Bold)
             }
         }
     }

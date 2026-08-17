@@ -1,4 +1,3 @@
-
 package com.prismorbit.app
 
 import androidx.compose.foundation.background
@@ -610,25 +609,58 @@ fun PlacementTrackerScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "‹",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 38.sp,
-                        modifier = Modifier.clickable { onBack() }
-                    )
-                    Spacer(Modifier.size(10.dp))
-                    Column {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surface,
+                                RoundedCornerShape(13.dp)
+                            )
+                            .clickable { onBack() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "‹",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Light
+                        )
+                    }
+
+                    Spacer(Modifier.size(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             "PLACEMENT",
                             color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 26.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.3.sp
                         )
+                        Spacer(Modifier.height(2.dp))
                         Text(
                             "BUILD • MEASURE • GET READY",
                             color = Color(0xFFFF7B72),
                             fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
                             letterSpacing = 1.5.sp
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                Color(0xFF2A1820),
+                                RoundedCornerShape(10.dp)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            "READINESS",
+                            color = Color(0xFFFF7B72),
+                            fontSize = 7.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
                         )
                     }
                 }
@@ -655,31 +687,51 @@ fun PlacementTrackerScreen(
                         Text(
                             if (loading) "CALCULATING..." else "${scores.readiness} / 100",
                             color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 40.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = 42.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.8).sp
                         )
                         if (!loading) {
                             Text(
                                 placementLabelFinal(scores.readiness),
                                 color = placementColorFinal(scores.readiness),
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.2.sp
                             )
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(13.dp))
                             PlacementProgress(scores.readiness / 100f)
+                            Spacer(Modifier.height(7.dp))
+                            Text(
+                                "Overall readiness across your PRISM profile",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 8.sp
+                            )
                         }
                     }
                 }
 
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    "READINESS BREAKDOWN",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp
-                )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "READINESS BREAKDOWN",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp
+                    )
+                    Spacer(Modifier.size(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(1.dp)
+                            .background(Color(0xFF292930))
+                    )
+                }
+                Spacer(Modifier.height(11.dp))
 
                 ReadinessFinalRow("ACADEMICS", scores.academic, "15% weight")
                 ReadinessFinalRow("DSA", scores.dsa, "25% weight")
@@ -704,13 +756,45 @@ fun PlacementTrackerScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(Modifier.padding(17.dp)) {
+                        Text(
+                            "LOWEST CURRENT READINESS AREAS",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.1.sp
+                        )
+                        Spacer(Modifier.height(7.dp))
+
                         weakAreas.forEachIndexed { index, pair ->
-                            Text(
-                                "${index + 1}. ${pair.first} — ${pair.second}%",
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(vertical = 5.dp)
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .background(
+                                            Color(0xFFFF7B72),
+                                            RoundedCornerShape(50)
+                                        )
+                                )
+                                Spacer(Modifier.size(9.dp))
+                                Text(
+                                    "${index + 1}. ${pair.first}",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    "${pair.second}%",
+                                    color = Color(0xFFFF7B72),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
@@ -718,8 +802,8 @@ fun PlacementTrackerScreen(
                 Spacer(Modifier.height(20.dp))
                 Text(
                     "🧠 SKILLS & COMPETENCIES",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.5.sp
                 )
@@ -814,7 +898,7 @@ fun PlacementTrackerScreen(
                 }
 
                 Spacer(Modifier.height(18.dp))
-                Text("🏆 ACHIEVEMENTS", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Text("🏆 ACHIEVEMENTS", color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                 Spacer(Modifier.height(10.dp))
                 PlacementCollectionFinal(
                     emptyText = "Add hackathon wins, ranks, competitions and other achievements.",
@@ -854,7 +938,7 @@ fun PlacementTrackerScreen(
                 }
 
                 Spacer(Modifier.height(18.dp))
-                Text("📜 CERTIFICATIONS", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Text("📜 CERTIFICATIONS", color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                 Spacer(Modifier.height(10.dp))
                 PlacementCollectionFinal(
                     emptyText = "Add certifications and credential links.",
@@ -894,7 +978,7 @@ fun PlacementTrackerScreen(
                 }
 
                 Spacer(Modifier.height(18.dp))
-                Text("🚀 ADDITIONAL LEARNING", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Text("🚀 ADDITIONAL LEARNING", color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                 Spacer(Modifier.height(10.dp))
                 PlacementCollectionFinal(
                     emptyText = "Track communication, aptitude, leadership and technical learning.",
@@ -934,7 +1018,7 @@ fun PlacementTrackerScreen(
                 }
 
                 Spacer(Modifier.height(18.dp))
-                Text("✦ PRISM PLACEMENT INSIGHT", color = Color(0xFFB76CFF), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Text("✦ PRISM PLACEMENT INSIGHT", color = Color(0xFFB76CFF), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                 Spacer(Modifier.height(8.dp))
                 Card(
                     Modifier.fillMaxWidth(),
@@ -1015,13 +1099,13 @@ private fun PlacementProgress(value: Float) {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(8.dp)
+            .height(9.dp)
             .background(Color(0xFF25252C), RoundedCornerShape(50.dp))
     ) {
         Box(
             Modifier
                 .fillMaxWidth(value.coerceIn(0f, 1f))
-                .height(8.dp)
+                .height(9.dp)
                 .background(Color(0xFFB76CFF), RoundedCornerShape(50.dp))
         )
     }

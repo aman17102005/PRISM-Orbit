@@ -1752,88 +1752,279 @@ private fun AcademicsScreen(
     var showAddEvent by remember { mutableStateOf(false) }
     var editingEvent by remember { mutableStateOf<AcademicEvent?>(null) }
     var editSemesters by remember { mutableStateOf(false) }
-    var semesterDrafts by remember(semesterValues) { mutableStateOf(semesterValues.toMutableList()) }
+    var semesterDrafts by remember(semesterValues) {
+        mutableStateOf(semesterValues.toMutableList())
+    }
     var semesterError by remember { mutableStateOf("") }
 
-    val semesterNames = listOf("SEM 1", "SEM 2", "SEM 3", "SEM 4", "SEM 5", "SEM 6", "SEM 7", "SEM 8")
+    val semesterNames = listOf(
+        "SEM 1", "SEM 2", "SEM 3", "SEM 4",
+        "SEM 5", "SEM 6", "SEM 7", "SEM 8"
+    )
+
+    val completedSemesters = semesterValues.count { it.isNotBlank() }
+    val cgpaProgress = (currentCgpa / 10f).coerceIn(0f, 1f)
+    val targetGap = (targetCgpa - currentCgpa).coerceAtLeast(0f)
+    val upcomingEvents = events.count {
+        eventStatus(it) == "UPCOMING" || eventStatus(it) == "TODAY"
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
-            .padding(20.dp)
+            .padding(horizontal = 20.dp, vertical = 22.dp)
     ) {
+
+        // =====================================================
+        // HEADER
+        // =====================================================
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "‹",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 38.sp,
-                modifier = Modifier.clickable { onBack() }
-            )
-            Spacer(modifier = Modifier.size(10.dp))
-            Column {
-                Text("ACADEMICS", color = MaterialTheme.colorScheme.onSurface, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
-                Text("PERFORMANCE + PLANNING", color = Color(0xFFB76CFF), fontSize = 8.sp, letterSpacing = 1.8.sp)
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "‹",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Light
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "ACADEMICS",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.3.sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "PERFORMANCE + PLANNING",
+                    color = Color(0xFFB76CFF),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.8.sp
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF1D1730))
+                    .padding(horizontal = 11.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "$completedSemesters/8",
+                    color = Color(0xFFB76CFF),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(25.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // =====================================================
+        // ACADEMIC HERO
+        // =====================================================
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            shape = RoundedCornerShape(26.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text("ACADEMIC OVERVIEW", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Spacer(modifier = Modifier.height(12.dp))
+            Column(
+                modifier = Modifier.padding(21.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
                     Column {
-                        Text("${"%.1f".format(currentCgpa)}", color = MaterialTheme.colorScheme.onSurface, fontSize = 42.sp, fontWeight = FontWeight.Bold)
-                        Text("CURRENT CGPA", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, letterSpacing = 1.2.sp)
+                        Text(
+                            text = "ACADEMIC OVERVIEW",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "%.1f".format(currentCgpa),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 44.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "CURRENT CGPA",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.2.sp
+                        )
                     }
-                    Text("TARGET  ${"%.1f".format(targetCgpa)}", color = Color(0xFF00D9FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "TARGET",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.2.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "%.1f".format(targetCgpa),
+                            color = Color(0xFF00D9FF),
+                            fontSize = 23.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (targetGap > 0f) {
+                                "${"%.1f".format(targetGap)} TO GO"
+                            } else {
+                                "TARGET ACHIEVED"
+                            },
+                            color = if (targetGap > 0f) {
+                                Color(0xFFB76CFF)
+                            } else {
+                                Color(0xFF65E572)
+                            },
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.height(15.dp))
-                ProgressBar(progress = (currentCgpa / 10f).coerceIn(0f, 1f))
-                Spacer(modifier = Modifier.height(15.dp))
+
+                Spacer(modifier = Modifier.height(17.dp))
+
+                ProgressBar(progress = cgpaProgress)
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "0.0",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 8.sp
+                    )
+                    Text(
+                        text = "10.0",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 8.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(17.dp))
+
                 Button(
                     onClick = onCgpaClick,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF8B4DFF)
+                    ),
                     shape = RoundedCornerShape(15.dp)
                 ) {
-                    Text("VIEW / EDIT CGPA", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "VIEW / EDIT CGPA",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(22.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // =====================================================
+        // QUICK STATS
+        // =====================================================
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            AcademicMiniStat(
+                modifier = Modifier.weight(1f),
+                label = "SEMESTERS",
+                value = "$completedSemesters / 8",
+                accent = Color(0xFFB76CFF)
+            )
+            AcademicMiniStat(
+                modifier = Modifier.weight(1f),
+                label = "EVENTS",
+                value = upcomingEvents.toString(),
+                accent = Color(0xFF00D9FF)
+            )
+            AcademicMiniStat(
+                modifier = Modifier.weight(1f),
+                label = "TARGET",
+                value = "%.1f".format(targetCgpa),
+                accent = Color(0xFF65E572)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(26.dp))
+
+        // =====================================================
+        // SEMESTER TRACKER
+        // =====================================================
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SectionTitle(text = "SEMESTER TRACKER")
+            Column {
+                SectionTitle(text = "SEMESTER TRACKER")
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "Keep every semester in one place.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp
+                )
+            }
+
             OutlinedButton(
                 onClick = {
-                    if (!editSemesters) semesterDrafts = semesterValues.toMutableList()
+                    if (!editSemesters) {
+                        semesterDrafts = semesterValues.toMutableList()
+                    }
                     semesterError = ""
                     editSemesters = !editSemesters
                 },
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text(if (editSemesters) "CANCEL" else "EDIT", fontSize = 9.sp)
+                Text(
+                    text = if (editSemesters) "CANCEL" else "EDIT",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
+
         Spacer(modifier = Modifier.height(12.dp))
 
         if (editSemesters) {
@@ -1849,8 +2040,18 @@ private fun AcademicsScreen(
                         semesterError = ""
                     },
                     label = { Text("$name SGPA") },
-                    placeholder = { Text(if (index < 2) "e.g. 8.4" else "Leave blank until completed") },
-                    supportingText = { Text("0.0 – 10.0; blank = not completed") },
+                    placeholder = {
+                        Text(
+                            if (index < 2) {
+                                "e.g. 8.4"
+                            } else {
+                                "Leave blank until completed"
+                            }
+                        )
+                    },
+                    supportingText = {
+                        Text("0.0 – 10.0; blank = not completed")
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 7.dp),
@@ -1859,13 +2060,24 @@ private fun AcademicsScreen(
             }
 
             if (semesterError.isNotEmpty()) {
-                Text(semesterError, color = Color(0xFFFF6B6B), fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+                Text(
+                    text = semesterError,
+                    color = Color(0xFFFF6B6B),
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
             Button(
                 onClick = {
-                    val valid = semesterDrafts.all { it.isBlank() || (it.toFloatOrNull()?.let { value -> value in 0f..10f } == true) }
+                    val valid = semesterDrafts.all {
+                        it.isBlank() ||
+                                (it.toFloatOrNull()?.let { value ->
+                                    value in 0f..10f
+                                } == true)
+                    }
+
                     if (!valid) {
                         semesterError = "Each SGPA must be between 0.0 and 10.0."
                     } else {
@@ -1875,46 +2087,159 @@ private fun AcademicsScreen(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF8B4DFF)
+                ),
                 shape = RoundedCornerShape(15.dp)
             ) {
-                Text("SAVE SEMESTERS", fontWeight = FontWeight.Bold)
+                Text(
+                    text = "SAVE SEMESTERS",
+                    fontWeight = FontWeight.Bold
+                )
             }
         } else {
-            semesterNames.forEachIndexed { index, name ->
-                val value = semesterValues.getOrElse(index) { "" }.trim()
-                SemesterRow(name, value, value.isNotBlank())
+            for (row in 0 until 4) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val firstIndex = row * 2
+                    val secondIndex = firstIndex + 1
+
+                    SemesterRow(
+                        name = semesterNames[firstIndex],
+                        sgpa = semesterValues.getOrElse(firstIndex) { "" }.trim(),
+                        completed = semesterValues.getOrElse(firstIndex) { "" }.isNotBlank(),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    SemesterRow(
+                        name = semesterNames[secondIndex],
+                        sgpa = semesterValues.getOrElse(secondIndex) { "" }.trim(),
+                        completed = semesterValues.getOrElse(secondIndex) { "" }.isNotBlank(),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(22.dp))
-        SectionTitle(text = "SEMESTER GROWTH")
+        Spacer(modifier = Modifier.height(26.dp))
+
+        // =====================================================
+        // SEMESTER GROWTH
+        // =====================================================
+
+        Column {
+            SectionTitle(text = "SEMESTER GROWTH")
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = "Your SGPA trend across completed semesters.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp
+            )
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
-                Text("SGPA TREND", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, letterSpacing = 1.5.sp)
-                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "SGPA TREND",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp
+                    )
+
+                    Text(
+                        text = if (completedSemesters > 0) {
+                            "$completedSemesters CHECKPOINTS"
+                        } else {
+                            "NO DATA YET"
+                        },
+                        color = Color(0xFF00D9FF),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
                 AcademicGrowthGraph(semesterValues)
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        SectionTitle(text = "ACADEMIC PLANNER")
+        Spacer(modifier = Modifier.height(26.dp))
+
+        // =====================================================
+        // ACADEMIC PLANNER
+        // =====================================================
+
+        Column {
+            SectionTitle(text = "ACADEMIC PLANNER")
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = "Plan tests, vivas, practicals and exams.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp
+            )
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
-        AcademicCalendar(events = events, onAddEvent = { showAddEvent = true })
-        Spacer(modifier = Modifier.height(22.dp))
+        AcademicCalendar(
+            events = events,
+            onAddEvent = { showAddEvent = true }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // =====================================================
+        // ACADEMIC EVENTS
+        // =====================================================
 
         if (events.isNotEmpty()) {
-            SectionTitle(text = "ACADEMIC EVENTS")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column {
+                    SectionTitle(text = "ACADEMIC EVENTS")
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "Your saved academic timeline.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp
+                    )
+                }
+
+                Text(
+                    text = "${events.size} TOTAL",
+                    color = Color(0xFFB76CFF),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
+
             events
-                .sortedWith(compareBy<AcademicEvent> { eventStatus(it) == "EXPIRED" || eventStatus(it) == "CANCELLED" }.thenBy { it.date })
+                .sortedWith(
+                    compareBy<AcademicEvent> {
+                        eventStatus(it) == "EXPIRED" || eventStatus(it) == "CANCELLED"
+                    }.thenBy { it.date }
+                )
                 .take(20)
                 .forEach { event ->
                     AcademicEventRow(
@@ -1924,18 +2249,38 @@ private fun AcademicsScreen(
                         onComplete = { onCompleteEvent(it) },
                         onCancel = { onCancelEvent(it) }
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(9.dp))
                 }
         } else {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text("NO UPCOMING EVENTS", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    Spacer(modifier = Modifier.height(5.dp))
-                    Text("Add your assignments, tests, viva, practicals and exams here.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
+                Column(modifier = Modifier.padding(19.dp)) {
+                    Text(
+                        text = "NO ACADEMIC EVENTS",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        letterSpacing = 0.7.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Add assignments, tests, viva, practicals and exams to keep your semester organised.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        lineHeight = 15.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Use + ADD ACADEMIC EVENT above to get started.",
+                        color = Color(0xFF00D9FF),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -1967,26 +2312,34 @@ private fun AcademicsScreen(
 }
 
 @Composable
-private fun SemesterRow(name: String, sgpa: String, completed: Boolean) {
+private fun AcademicMiniStat(
+    modifier: Modifier,
+    label: String,
+    value: String,
+    accent: Color
+) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        shape = RoundedCornerShape(15.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        modifier = modifier,
+        shape = RoundedCornerShape(17.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(13.dp)
         ) {
-            Text(name, color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Text(
-                text = if (completed) sgpa else "NOT COMPLETED",
-                color = if (completed) Color(0xFF00D9FF) else Color(0xFF66666F),
-                fontSize = 11.sp,
+                text = label,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 7.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = value,
+                color = accent,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -1994,8 +2347,66 @@ private fun SemesterRow(name: String, sgpa: String, completed: Boolean) {
 }
 
 @Composable
+private fun SemesterRow(
+    name: String,
+    sgpa: String,
+    completed: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.padding(vertical = 3.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Text(
+                text = name,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = if (completed) sgpa else "—",
+                color = if (completed) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    Color(0xFF66666F)
+                },
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = if (completed) "COMPLETED" else "NOT COMPLETED",
+                color = if (completed) {
+                    Color(0xFF65E572)
+                } else {
+                    Color(0xFF66666F)
+                },
+                fontSize = 7.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp
+            )
+        }
+    }
+}
+
+@Composable
 private fun AcademicGrowthGraph(semesterValues: List<String>) {
-    val parsed = semesterValues.mapNotNull { it.toFloatOrNull()?.takeIf { value -> value in 0f..10f } }
+    val parsed = semesterValues.mapNotNull {
+        it.toFloatOrNull()?.takeIf { value -> value in 0f..10f }
+    }
+
     val points = when {
         parsed.size >= 2 -> parsed
         parsed.size == 1 -> listOf(parsed.first(), parsed.first())
@@ -2024,13 +2435,19 @@ private fun AcademicGrowthGraph(semesterValues: List<String>) {
         val offsets = points.mapIndexed { index, value ->
             Offset(
                 x = index * step,
-                y = size.height - ((value - min) / (max - min)).coerceIn(0f, 1f) * size.height
+                y = size.height -
+                        ((value - min) / (max - min)).coerceIn(0f, 1f) * size.height
             )
         }
 
         for (i in 0 until offsets.size - 1) {
             drawLine(
-                brush = Brush.linearGradient(listOf(Color(0xFFB76CFF), Color(0xFF00D9FF))),
+                brush = Brush.linearGradient(
+                    listOf(
+                        Color(0xFFB76CFF),
+                        Color(0xFF00D9FF)
+                    )
+                ),
                 start = offsets[i],
                 end = offsets[i + 1],
                 strokeWidth = 4.dp.toPx(),
@@ -2039,7 +2456,11 @@ private fun AcademicGrowthGraph(semesterValues: List<String>) {
         }
 
         offsets.forEach {
-            drawCircle(Color(0xFF00D9FF), 5.dp.toPx(), it)
+            drawCircle(
+                color = Color(0xFF00D9FF),
+                radius = 5.dp.toPx(),
+                center = it
+            )
         }
     }
 }
@@ -2053,19 +2474,26 @@ private fun AcademicCalendar(
     val year = calendar.get(Calendar.YEAR)
     val month = calendar.get(Calendar.MONTH)
     val today = calendar.get(Calendar.DAY_OF_MONTH)
+
     val first = Calendar.getInstance().apply {
         set(year, month, 1)
     }
+
     val firstDay = (first.get(Calendar.DAY_OF_WEEK) + 5) % 7
     val daysInMonth = first.getActualMaximum(Calendar.DAY_OF_MONTH)
-    val eventDays = events.mapNotNull { it.date.substringAfterLast('-').toIntOrNull() }.toSet()
+    val eventDays = events
+        .mapNotNull { it.date.substringAfterLast('-').toIntOrNull() }
+        .toSet()
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -2073,21 +2501,41 @@ private fun AcademicCalendar(
             ) {
                 Column {
                     Text(
-                        text = first.getDisplayName(Calendar.MONTH, Calendar.LONG, java.util.Locale.getDefault()).uppercase(),
+                        text = first.getDisplayName(
+                            Calendar.MONTH,
+                            Calendar.LONG,
+                            java.util.Locale.getDefault()
+                        ).uppercase(),
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(year.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = year.toString(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp
+                    )
                 }
-                Text(
-                    text = "${events.size} EVENTS",
-                    color = Color(0xFF00D9FF),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold
-                )
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF1D1730))
+                        .padding(horizontal = 9.dp, vertical = 7.dp)
+                ) {
+                    Text(
+                        text = "${events.size} EVENTS",
+                        color = Color(0xFF00D9FF),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    )
+                }
             }
-            Spacer(modifier = Modifier.height(15.dp))
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Row(modifier = Modifier.fillMaxWidth()) {
                 listOf("M", "T", "W", "T", "F", "S", "S").forEach {
                     Text(
@@ -2099,12 +2547,16 @@ private fun AcademicCalendar(
                     )
                 }
             }
+
             Spacer(modifier = Modifier.height(8.dp))
+
             val totalCells = ((firstDay + daysInMonth + 6) / 7) * 7
+
             for (weekStart in 0 until totalCells step 7) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     for (cell in weekStart until weekStart + 7) {
                         val day = cell - firstDay + 1
+
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -2114,6 +2566,7 @@ private fun AcademicCalendar(
                             if (day in 1..daysInMonth) {
                                 val isToday = day == today
                                 val hasEvent = day in eventDays
+
                                 Box(
                                     modifier = Modifier
                                         .size(30.dp)
@@ -2129,9 +2582,17 @@ private fun AcademicCalendar(
                                 ) {
                                     Text(
                                         text = day.toString(),
-                                        color = if (isToday || hasEvent) Color.White else Color(0xFFAAAAAF),
+                                        color = if (isToday || hasEvent) {
+                                            Color.White
+                                        } else {
+                                            Color(0xFFAAAAAF)
+                                        },
                                         fontSize = 10.sp,
-                                        fontWeight = if (isToday || hasEvent) FontWeight.Bold else FontWeight.Normal
+                                        fontWeight = if (isToday || hasEvent) {
+                                            FontWeight.Bold
+                                        } else {
+                                            FontWeight.Normal
+                                        }
                                     )
                                 }
                             }
@@ -2139,14 +2600,21 @@ private fun AcademicCalendar(
                     }
                 }
             }
+
             Spacer(modifier = Modifier.height(14.dp))
+
             Button(
                 onClick = onAddEvent,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF8B4DFF)
+                ),
                 shape = RoundedCornerShape(15.dp)
             ) {
-                Text("+  ADD ACADEMIC EVENT", fontWeight = FontWeight.Bold)
+                Text(
+                    text = "+  ADD ACADEMIC EVENT",
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
@@ -2161,6 +2629,7 @@ private fun AcademicEventRow(
     onCancel: (Long) -> Unit
 ) {
     val status = eventStatus(event)
+
     val statusColor = when (status) {
         "COMPLETED" -> Color(0xFF65E572)
         "CANCELLED" -> Color(0xFFFF7B72)
@@ -2171,61 +2640,84 @@ private fun AcademicEventRow(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(17.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(19.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     ) {
-        Column(modifier = Modifier.padding(15.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    event.title,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    status,
-                    color = statusColor,
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = event.title,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(5.dp))
+
+                    Text(
+                        text = "${event.subject}  •  ${event.date}  •  ${event.day}",
+                        color = Color(0xFF00D9FF),
+                        fontSize = 9.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(statusColor.copy(alpha = 0.12f))
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = status,
+                        color = statusColor,
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.7.sp
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(5.dp))
+            Spacer(modifier = Modifier.height(7.dp))
+
             Text(
-                "${event.subject}  •  ${event.date}  •  ${event.day}",
-                color = Color(0xFF00D9FF),
-                fontSize = 9.sp
-            )
-            Text(
-                event.type.uppercase(),
+                text = event.type.uppercase(),
                 color = Color(0xFFB76CFF),
                 fontSize = 8.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
             )
 
             if (event.syllabus.isNotBlank()) {
-                Spacer(modifier = Modifier.height(5.dp))
+                Spacer(modifier = Modifier.height(7.dp))
                 Text(
-                    "Syllabus: ${event.syllabus}",
+                    text = "SYLLABUS  •  ${event.syllabus}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp
-                )
-            }
-            if (event.notes.isNotBlank()) {
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    event.notes,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp
+                    fontSize = 9.sp,
+                    lineHeight = 14.sp
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            if (event.notes.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = event.notes,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp,
+                    lineHeight = 14.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(11.dp))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(7.dp)
@@ -2233,22 +2725,26 @@ private fun AcademicEventRow(
                 OutlinedButton(
                     onClick = { onEdit(event) },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(11.dp)
                 ) {
-                    Text("EDIT", fontSize = 9.sp)
+                    Text("EDIT", fontSize = 8.sp)
                 }
 
                 OutlinedButton(
                     onClick = { onDelete(event.id) },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(11.dp)
                 ) {
-                    Text("DELETE", fontSize = 9.sp)
+                    Text("DELETE", fontSize = 8.sp)
                 }
             }
 
-            if (status != "COMPLETED" && status != "CANCELLED" && status != "EXPIRED") {
+            if (status != "COMPLETED" &&
+                status != "CANCELLED" &&
+                status != "EXPIRED"
+            ) {
                 Spacer(modifier = Modifier.height(7.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(7.dp)
@@ -2259,17 +2755,21 @@ private fun AcademicEventRow(
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF17351F)
                         ),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(11.dp)
                     ) {
-                        Text("✓ COMPLETE", fontSize = 9.sp, color = Color(0xFF65E572))
+                        Text(
+                            text = "✓ COMPLETE",
+                            fontSize = 8.sp,
+                            color = Color(0xFF65E572)
+                        )
                     }
 
                     OutlinedButton(
                         onClick = { onCancel(event.id) },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(11.dp)
                     ) {
-                        Text("CANCEL", fontSize = 9.sp)
+                        Text("CANCEL", fontSize = 8.sp)
                     }
                 }
             }
@@ -2305,27 +2805,44 @@ private fun AddAcademicEventScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp)
+                .padding(horizontal = 20.dp, vertical = 22.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "‹",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 38.sp,
-                    modifier = Modifier.clickable { onBack() }
-                )
-                Spacer(modifier = Modifier.size(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "‹",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Light
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
                 Column {
                     Text(
-                        if (initialEvent == null) "ADD EVENT" else "EDIT EVENT",
+                        text = if (initialEvent == null) "ADD EVENT" else "EDIT EVENT",
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.SemiBold
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        "ACADEMIC PLANNER",
+                        text = "ACADEMIC PLANNER",
                         color = Color(0xFF00D9FF),
                         fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
                         letterSpacing = 1.5.sp
                     )
                 }
@@ -2333,34 +2850,52 @@ private fun AddAcademicEventScreen(
 
             Spacer(modifier = Modifier.height(25.dp))
 
+            Text(
+                text = "EVENT DETAILS",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             OutlinedTextField(
                 value = title,
-                onValueChange = { title = it; error = "" },
+                onValueChange = {
+                    title = it
+                    error = ""
+                },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Event Title") },
                 placeholder = { Text("e.g. Hall Effect Viva") },
                 singleLine = true
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             OutlinedTextField(
                 value = subject,
-                onValueChange = { subject = it; error = "" },
+                onValueChange = {
+                    subject = it
+                    error = ""
+                },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Subject") },
                 placeholder = { Text("e.g. Engineering Physics") },
                 singleLine = true
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
+
             Text(
-                "EVENT TYPE",
+                text = "EVENT TYPE",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
+                fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp
             )
+
             Spacer(modifier = Modifier.height(8.dp))
 
             types.forEach { item ->
@@ -2414,7 +2949,11 @@ private fun AddAcademicEventScreen(
 
             if (error.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(error, color = Color(0xFFFF6B6B), fontSize = 11.sp)
+                Text(
+                    text = error,
+                    color = Color(0xFFFF6B6B),
+                    fontSize = 11.sp
+                )
             }
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -2422,10 +2961,17 @@ private fun AddAcademicEventScreen(
             Button(
                 onClick = {
                     val parsed = parseAcademicDate(date)
+
                     when {
-                        title.trim().isEmpty() -> error = "Please enter an event title."
-                        subject.trim().isEmpty() -> error = "Please enter the subject."
-                        parsed == null -> error = "Use a valid date in YYYY-MM-DD format."
+                        title.trim().isEmpty() ->
+                            error = "Please enter an event title."
+
+                        subject.trim().isEmpty() ->
+                            error = "Please enter the subject."
+
+                        parsed == null ->
+                            error = "Use a valid date in YYYY-MM-DD format."
+
                         else -> {
                             onSave(
                                 AcademicEvent(
@@ -2448,11 +2994,17 @@ private fun AddAcademicEventScreen(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF8B4DFF)
+                ),
                 shape = RoundedCornerShape(15.dp)
             ) {
                 Text(
-                    if (initialEvent == null) "SAVE EVENT" else "SAVE CHANGES",
+                    text = if (initialEvent == null) {
+                        "SAVE EVENT"
+                    } else {
+                        "SAVE CHANGES"
+                    },
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -2477,6 +3029,7 @@ private fun eventStatus(event: AcademicEvent): String {
     }
 
     val today = todayDateKey()
+
     return when {
         event.date < today -> "EXPIRED"
         event.date == today -> "TODAY"
@@ -2487,17 +3040,29 @@ private fun eventStatus(event: AcademicEvent): String {
 private fun parseAcademicDate(value: String): Pair<String, String>? {
     val parts = value.split("-")
     if (parts.size != 3) return null
+
     val year = parts[0].toIntOrNull() ?: return null
     val month = parts[1].toIntOrNull() ?: return null
     val day = parts[2].toIntOrNull() ?: return null
-    if (month !in 1..12 || day !in 1..31 || parts[0].length != 4) return null
+
+    if (month !in 1..12 || day !in 1..31 || parts[0].length != 4) {
+        return null
+    }
+
     val calendar = Calendar.getInstance()
     calendar.clear()
     calendar.setLenient(false)
+
     return try {
         calendar.set(year, month - 1, day)
         calendar.time
-        val weekday = calendar.getDisplayName(Calendar.DAY_OF_WEEK, Calendar.LONG, java.util.Locale.getDefault()) ?: return null
+
+        val weekday = calendar.getDisplayName(
+            Calendar.DAY_OF_WEEK,
+            Calendar.LONG,
+            java.util.Locale.getDefault()
+        ) ?: return null
+
         weekday to value
     } catch (_: Exception) {
         null
@@ -2519,43 +3084,92 @@ private fun ProjectsScreen(
     var showAddProject by remember { mutableStateOf(false) }
     var editingProject by remember { mutableStateOf<ProjectItem?>(null) }
 
+    val completedProjects = projects.count { it.status == "COMPLETED" }
+    val averageProgress = if (projects.isEmpty()) 0 else projects.map { it.progress }.average().roundToInt()
+    val projectsWithGithub = projects.count { it.githubUrl.isNotBlank() }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
-            .padding(20.dp)
+            .padding(horizontal = 20.dp, vertical = 22.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("‹", color = MaterialTheme.colorScheme.onSurface, fontSize = 38.sp, modifier = Modifier.clickable { onBack() })
-            Spacer(modifier = Modifier.size(10.dp))
-            Column {
-                Text("PROJECTS", color = MaterialTheme.colorScheme.onSurface, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-                Text("BUILD • DOCUMENT • SHOWCASE", color = Color(0xFF65E572), fontSize = 8.sp, letterSpacing = 1.5.sp)
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("‹", color = MaterialTheme.colorScheme.onSurface, fontSize = 32.sp, fontWeight = FontWeight.Light)
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("PROJECTS", color = MaterialTheme.colorScheme.onSurface, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text("BUILD • DOCUMENT • SHOWCASE", color = Color(0xFF65E572), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(Color(0xFF14251A))
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+            ) {
+                Text("${projects.size} TOTAL", color = Color(0xFF65E572), fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(23.dp))
 
-        val completedProjects = projects.count { it.status == "COMPLETED" }
-        val averageProgress = if (projects.isEmpty()) 0 else projects.map { it.progress }.average().roundToInt()
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("PORTFOLIO OVERVIEW", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+                        Spacer(modifier = Modifier.height(7.dp))
+                        Text("${projects.size} projects", color = MaterialTheme.colorScheme.onSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text("Keep building evidence that shows what you can actually do.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, lineHeight = 14.sp)
+                    }
+                    Text("$averageProgress%", color = Color(0xFF65E572), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+                ProgressBar(averageProgress / 100f)
+                Spacer(modifier = Modifier.height(7.dp))
+                Text("AVERAGE PROJECT PROGRESS", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            }
+        }
 
+        Spacer(modifier = Modifier.height(13.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SmallStatCard(Modifier.weight(1f), "PROJECTS", projects.size.toString())
             SmallStatCard(Modifier.weight(1f), "COMPLETED", completedProjects.toString())
-            SmallStatCard(Modifier.weight(1f), "AVG PROGRESS", "$averageProgress%")
+            SmallStatCard(Modifier.weight(1f), "GITHUB", projectsWithGithub.toString())
         }
 
-        Spacer(modifier = Modifier.height(22.dp))
+        Spacer(modifier = Modifier.height(23.dp))
         SectionTitle("YOUR PROJECTS")
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(11.dp))
 
         if (projects.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text("NO PROJECTS YET", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("NO PROJECTS YET", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = .7.sp)
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("Add your projects, tasks, links and project photos here.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
+                    Text("Add your projects, tasks, links and project photos here.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
+                    Spacer(modifier = Modifier.height(13.dp))
+                    Text("Start with one project and build your portfolio from there.", color = Color(0xFF65E572), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
             }
         } else {
@@ -2574,7 +3188,7 @@ private fun ProjectsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(13.dp))
         Button(
             onClick = { showAddProject = true },
             modifier = Modifier.fillMaxWidth(),
@@ -2587,19 +3201,11 @@ private fun ProjectsScreen(
     }
 
     if (showAddProject) {
-        ProjectEditorScreen(
-            initialProject = null,
-            onBack = { showAddProject = false },
-            onSave = { onAddProject(it); showAddProject = false }
-        )
+        ProjectEditorScreen(initialProject = null, onBack = { showAddProject = false }, onSave = { onAddProject(it); showAddProject = false })
     }
 
     editingProject?.let { project ->
-        ProjectEditorScreen(
-            initialProject = project,
-            onBack = { editingProject = null },
-            onSave = { onUpdateProject(it); editingProject = null }
-        )
+        ProjectEditorScreen(initialProject = project, onBack = { editingProject = null }, onSave = { onUpdateProject(it); editingProject = null })
     }
 }
 
@@ -2620,48 +3226,104 @@ private fun ProjectCard(
         else -> Color(0xFFB76CFF)
     }
 
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(17.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(21.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(project.name, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(project.status, color = statusColor, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                    Spacer(modifier = Modifier.height(5.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(statusColor.copy(alpha = .12f))
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                    ) {
+                        Text(project.status, color = statusColor, fontSize = 7.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    }
                 }
-                Text("${project.progress}%", color = statusColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("${project.progress}%", color = statusColor, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             }
 
             if (project.description.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(9.dp))
                 Text(project.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(11.dp))
             ProgressBar(project.progress / 100f)
             Spacer(modifier = Modifier.height(10.dp))
-            Text("Tech: ${project.techStack.ifBlank { "Not added" }}", color = Color(0xFFB76CFF), fontSize = 9.sp)
-            Text("Started: ${project.startDate.ifBlank { "Not added" }}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
-            Text("Tasks: $completedTasks / $taskTotal", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
 
-            if (project.tasks.isNotEmpty()) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ProjectMetaPill("TECH", project.techStack.ifBlank { "Not added" }, Modifier.weight(1f))
+                ProjectMetaPill("TASKS", "$completedTasks / $taskTotal", Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(7.dp))
+            ProjectMetaPill("STARTED", project.startDate.ifBlank { "Not added" }, Modifier.fillMaxWidth())
+
+            if (project.githubUrl.isNotBlank() || project.liveUrl.isNotBlank()) {
                 Spacer(modifier = Modifier.height(10.dp))
-                project.tasks.forEach { task ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { onToggleTask(task.id) }.padding(vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(if (task.completed) "☑" else "☐", color = if (task.completed) Color(0xFF65E572) else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                        Spacer(modifier = Modifier.width(7.dp))
-                        Text(task.title, color = if (task.completed) MaterialTheme.colorScheme.onSurfaceVariant else Color.White, fontSize = 9.sp)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    if (project.githubUrl.isNotBlank()) {
+                        Box(modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(Color(0xFF17172A)).padding(horizontal = 9.dp, vertical = 6.dp)) {
+                            Text("GITHUB LINK SAVED", color = Color(0xFFB76CFF), fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (project.liveUrl.isNotBlank()) {
+                        Box(modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(Color(0xFF14251A)).padding(horizontal = 9.dp, vertical = 6.dp)) {
+                            Text("LIVE LINK SAVED", color = Color(0xFF65E572), fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("EDIT", fontSize = 9.sp) }
-                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("DELETE", fontSize = 9.sp) }
+            if (project.tasks.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("TASKS", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Spacer(modifier = Modifier.height(5.dp))
+                project.tasks.forEach { task ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleTask(task.id) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(if (task.completed) "☑" else "☐", color = if (task.completed) Color(0xFF65E572) else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(7.dp))
+                        Text(task.title, color = if (task.completed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, fontSize = 10.sp, lineHeight = 14.sp)
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.height(11.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f), shape = RoundedCornerShape(11.dp)) {
+                    Text("EDIT", fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f), shape = RoundedCornerShape(11.dp)) {
+                    Text("DELETE", fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectMetaPill(label: String, value: String, modifier: Modifier) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(11.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 7.sp, fontWeight = FontWeight.Bold, letterSpacing = .8.sp)
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(value, color = MaterialTheme.colorScheme.onSurface, fontSize = 9.sp, maxLines = 1)
         }
     }
 }
@@ -2813,232 +3475,193 @@ private fun DSAScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
-            .padding(20.dp)
+            .padding(horizontal = 20.dp, vertical = 22.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "‹",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 38.sp,
-                modifier = Modifier.clickable { onBack() }
-            )
-            Spacer(modifier = Modifier.size(10.dp))
-            Column {
-                Text(
-                    text = "DSA",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "PROBLEM SOLVING",
-                    color = Color(0xFF00D9FF),
-                    fontSize = 8.sp,
-                    letterSpacing = 1.8.sp
-                )
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("‹", color = MaterialTheme.colorScheme.onSurface, fontSize = 32.sp, fontWeight = FontWeight.Light)
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text("DSA", color = MaterialTheme.colorScheme.onSurface, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text("PROBLEM SOLVING", color = Color(0xFF00D9FF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(Color(0xFF101F24))
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+            ) {
+                Text("${problems.size} SOLVED", color = Color(0xFF00D9FF), fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
         }
 
-        Spacer(modifier = Modifier.height(25.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(26.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "OVERALL DSA SCORE",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                )
+            Column(modifier = Modifier.padding(22.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("OVERALL DSA SCORE", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("${dsaScore.roundToInt()}%", color = MaterialTheme.colorScheme.onSurface, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text("Weighted progress toward your PRISM target", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF17172A))
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                    ) {
+                        Text("1000 TARGET", color = Color(0xFFB76CFF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = .7.sp)
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(15.dp))
-                CircularProgress(
-                    progress = dsaScore / 100f,
-                    percentage = dsaScore.roundToInt()
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Weighted Score  ${"%.1f".format(weightedScore)}",
-                    color = Color(0xFF9A9AA4),
-                    fontSize = 11.sp
-                )
+                ProgressBar(dsaScore / 100f)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("0%", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 8.sp)
+                    Text("${"%.1f".format(weightedScore)} weighted points", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 8.sp)
+                    Text("100%", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 8.sp)
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            SmallStatCard(
-                modifier = Modifier.weight(1f),
-                title = "SOLVED",
-                value = problems.size.toString()
-            )
-            SmallStatCard(
-                modifier = Modifier.weight(1f),
-                title = "TARGET",
-                value = "100"
-            )
-            SmallStatCard(
-                modifier = Modifier.weight(1f),
-                title = "STREAK",
-                value = "100 🔥"
-            )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SmallStatCard(Modifier.weight(1f), "SOLVED", problems.size.toString())
+            SmallStatCard(Modifier.weight(1f), "TARGET", "100")
+            SmallStatCard(Modifier.weight(1f), "WEIGHTED", "${"%.0f".format(weightedScore)}")
         }
 
-        Spacer(modifier = Modifier.height(22.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+        SectionTitle("DIFFICULTY BREAKDOWN")
+        Spacer(modifier = Modifier.height(11.dp))
+        DifficultyRow("EASY", easyCount, Color(0xFF65E572))
+        Spacer(modifier = Modifier.height(9.dp))
+        DifficultyRow("MEDIUM", mediumCount, Color(0xFFFFD23F))
+        Spacer(modifier = Modifier.height(9.dp))
+        DifficultyRow("HARD", hardCount, Color(0xFFFF7B72))
 
-        SectionTitle(text = "DIFFICULTY BREAKDOWN")
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+        SectionTitle("TOPIC MASTERY")
+        Spacer(modifier = Modifier.height(11.dp))
+        TopicProgressRow("Arrays", topicProgress(problems, "Arrays"))
+        TopicProgressRow("Strings", topicProgress(problems, "Strings"))
+        TopicProgressRow("Linked List", topicProgress(problems, "Linked List"))
+        TopicProgressRow("Trees / BST", topicProgress(problems, "Trees / BST"))
+        TopicProgressRow("Graphs", topicProgress(problems, "Graphs"))
+        TopicProgressRow("Dynamic Programming", topicProgress(problems, "Dynamic Programming"))
 
-        DifficultyRow(title = "EASY", count = easyCount, color = Color(0xFF65E572))
-        Spacer(modifier = Modifier.height(10.dp))
-        DifficultyRow(title = "MEDIUM", count = mediumCount, color = Color(0xFFFFD23F))
-        Spacer(modifier = Modifier.height(10.dp))
-        DifficultyRow(title = "HARD", count = hardCount, color = Color(0xFFFF7B72))
-
-        Spacer(modifier = Modifier.height(25.dp))
-
-        SectionTitle(text = "TOPIC MASTERY")
-        Spacer(modifier = Modifier.height(12.dp))
-
-        TopicProgressRow(topic = "Arrays", progress = topicProgress(problems, "Arrays"))
-        TopicProgressRow(topic = "Strings", progress = topicProgress(problems, "Strings"))
-        TopicProgressRow(topic = "Linked List", progress = topicProgress(problems, "Linked List"))
-        TopicProgressRow(topic = "Trees / BST", progress = topicProgress(problems, "Trees / BST"))
-        TopicProgressRow(topic = "Graphs", progress = topicProgress(problems, "Graphs"))
-        TopicProgressRow(topic = "Dynamic Programming", progress = topicProgress(problems, "Dynamic Programming"))
-
-        Spacer(modifier = Modifier.height(25.dp))
-
-        SectionTitle(text = "DSA GROWTH")
-        Spacer(modifier = Modifier.height(12.dp))
-
+        Spacer(modifier = Modifier.height(24.dp))
+        SectionTitle("DSA GROWTH")
+        Spacer(modifier = Modifier.height(11.dp))
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
-                Text(
-                    text = "LAST 6 CHECKPOINTS",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 9.sp,
-                    letterSpacing = 1.5.sp
-                )
-                Spacer(modifier = Modifier.height(15.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("LAST 6 CHECKPOINTS", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+                    Text("CONSISTENCY", color = Color(0xFF00D9FF), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(13.dp))
                 GrowthGraph(currentScore = dsaScore)
             }
         }
 
-        Spacer(modifier = Modifier.height(25.dp))
-
-        SectionTitle(text = "RECENT PROBLEMS")
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+        SectionTitle("RECENT PROBLEMS")
+        Spacer(modifier = Modifier.height(11.dp))
 
         when {
-            isLoading -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Text(
-                        text = "LOADING YOUR DSA DATA...",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(18.dp)
-                    )
+            isLoading -> Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text("LOADING YOUR DSA DATA...", color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Restoring your saved problem history.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
                 }
             }
 
-            problems.isEmpty() -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Text(
-                            text = "NO PROBLEMS YET",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp
-                        )
-                        Spacer(modifier = Modifier.height(5.dp))
-                        Text(
-                            text = "Add the problems you have solved. They will be saved to your PRISM account and restored when you reopen the app.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 10.sp
-                        )
-                    }
+            problems.isEmpty() -> Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text("NO PROBLEMS YET", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = .6.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Add the problems you have solved. They will be saved to your PRISM account and restored when you reopen the app.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
                 }
             }
 
-            else -> {
-                problems.takeLast(5).reversed().forEach { problem ->
-                    ProblemRow(
-                        problem = problem,
-                        onDelete = { onDeleteProblem(problem) }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+            else -> problems.takeLast(5).reversed().forEach { problem ->
+                ProblemRow(problem = problem, onDelete = { onDeleteProblem(problem) })
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
 
         if (errorMessage.isNotBlank()) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = errorMessage,
-                color = Color(0xFFFF7B72),
-                fontSize = 11.sp
-            )
+            Spacer(modifier = Modifier.height(9.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF241416))
+            ) {
+                Text(errorMessage, color = Color(0xFFFF7B72), fontSize = 10.sp, modifier = Modifier.padding(13.dp))
+            }
         }
 
-        Spacer(modifier = Modifier.height(15.dp))
-
+        Spacer(modifier = Modifier.height(14.dp))
         Button(
             onClick = { showAddProblem = true },
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
             shape = RoundedCornerShape(16.dp)
         ) {
-            Text(text = "+  ADD PROBLEM", fontWeight = FontWeight.Bold)
+            Text("+  ADD PROBLEM", fontWeight = FontWeight.Bold)
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-
+        Spacer(modifier = Modifier.height(18.dp))
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text(
-                    text = "✦  PRISM INSIGHT",
-                    color = Color(0xFFB76CFF),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = generateDsaInsight(problems),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
-                    lineHeight = 21.sp
-                )
+            Column(modifier = Modifier.padding(19.dp)) {
+                Text("✦  PRISM INSIGHT", color = Color(0xFFB76CFF), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Spacer(modifier = Modifier.height(9.dp))
+                Text(generateDsaInsight(problems), color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, lineHeight = 20.sp)
             }
         }
 
@@ -3051,15 +3674,12 @@ private fun DSAScreen(
             onSave = { problem, result ->
                 onAddProblem(problem) { success, message ->
                     result(success, message)
-                    if (success) {
-                        showAddProblem = false
-                    }
+                    if (success) showAddProblem = false
                 }
             }
         )
     }
 }
-
 
 // =========================================================
 // ADD PROBLEM SCREEN
@@ -4056,19 +4676,13 @@ private fun ProfileScreen(
         val photoRef = storage.reference.child("users/${user.uid}/profile_photo.jpg")
         photoRef.putFile(uri)
             .continueWithTask { task ->
-                if (!task.isSuccessful) {
-                    throw task.exception ?: Exception("Photo upload failed.")
-                }
+                if (!task.isSuccessful) throw task.exception ?: Exception("Photo upload failed.")
                 photoRef.downloadUrl
             }
             .addOnSuccessListener { downloadUri ->
                 photoUrl = downloadUri.toString()
-                firestore.collection("users")
-                    .document(user.uid)
-                    .set(
-                        mapOf("photoUrl" to photoUrl),
-                        SetOptions.merge()
-                    )
+                firestore.collection("users").document(user.uid)
+                    .set(mapOf("photoUrl" to photoUrl), SetOptions.merge())
                     .addOnSuccessListener {
                         message = "Profile photo uploaded successfully."
                         messageIsError = false
@@ -4086,10 +4700,7 @@ private fun ProfileScreen(
 
     if (user == null) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(20.dp),
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -4101,9 +4712,7 @@ private fun ProfileScreen(
     }
 
     LaunchedEffect(user.uid) {
-        firestore.collection("users")
-            .document(user.uid)
-            .get()
+        firestore.collection("users").document(user.uid).get()
             .addOnSuccessListener { document ->
                 fullName = document.getString("name") ?: ""
                 email = document.getString("email") ?: (user.email ?: "")
@@ -4123,25 +4732,16 @@ private fun ProfileScreen(
             }
     }
 
-    // Load the saved photo on another device.
     LaunchedEffect(photoUrl) {
         if (photoUrl.isBlank() || localPhoto != null) return@LaunchedEffect
         localPhoto = withContext(Dispatchers.IO) {
-            try {
-                URL(photoUrl).openStream().use { BitmapFactory.decodeStream(it) }
-            } catch (_: Exception) {
-                null
-            }
+            try { URL(photoUrl).openStream().use { BitmapFactory.decodeStream(it) } }
+            catch (_: Exception) { null }
         }
     }
 
     if (isLoading) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
             Text("Loading your profile...", color = MaterialTheme.colorScheme.onSurface)
         }
         return
@@ -4152,184 +4752,84 @@ private fun ProfileScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
-            .padding(20.dp)
+            .padding(horizontal = 20.dp, vertical = 22.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "‹",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 38.sp,
-                modifier = Modifier.clickable { onBack() }
-            )
-            Spacer(modifier = Modifier.size(10.dp))
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(MaterialTheme.colorScheme.surface).clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) { Text("‹", color = MaterialTheme.colorScheme.onSurface, fontSize = 32.sp, fontWeight = FontWeight.Light) }
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "MY PROFILE",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "YOUR PRISM ACCOUNT",
-                    color = Color(0xFFB76CFF),
-                    fontSize = 8.sp,
-                    letterSpacing = 1.8.sp
-                )
+                Text("MY PROFILE", color = MaterialTheme.colorScheme.onSurface, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text("YOUR PRISM ACCOUNT", color = Color(0xFFB76CFF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+            }
+            Box(modifier = Modifier.clip(RoundedCornerShape(11.dp)).background(Color(0xFF17172A)).padding(horizontal = 9.dp, vertical = 7.dp)) {
+                Text(if (isEditing) "EDITING" else "PROFILE", color = Color(0xFFB76CFF), fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(23.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(25.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(21.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (localPhoto != null) {
-                    Image(
-                        bitmap = localPhoto!!.asImageBitmap(),
-                        contentDescription = "Profile photo",
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(50.dp))
-                            .background(Color(0xFF202027))
-                    )
+                    Image(bitmap = localPhoto!!.asImageBitmap(), contentDescription = "Profile photo", modifier = Modifier.size(108.dp).clip(RoundedCornerShape(54.dp)).background(Color(0xFF202027)))
                 } else {
                     Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(Color(0xFFB76CFF), Color(0xFF00D9FF))
-                                ),
-                                RoundedCornerShape(50.dp)
-                            ),
+                        modifier = Modifier.size(108.dp).background(Brush.linearGradient(listOf(Color(0xFFB76CFF), Color(0xFF00D9FF))), RoundedCornerShape(54.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = fullName.firstOrNull()?.uppercase() ?: "A",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 34.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text(fullName.firstOrNull()?.uppercase() ?: "A", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-
+                Spacer(modifier = Modifier.height(11.dp))
+                Text(fullName.ifBlank { "PRISM USER" }, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(email.ifBlank { "No email available" }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
                 Spacer(modifier = Modifier.height(14.dp))
-
                 if (isEditing) {
-                    OutlinedButton(
-                        onClick = { photoPicker.launch("image/*") },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("UPLOAD PHOTO", fontWeight = FontWeight.Bold)
+                    OutlinedButton(onClick = { photoPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                        Text("UPLOAD PHOTO", fontWeight = FontWeight.Bold, fontSize = 9.sp)
                     }
                 } else {
-                    Text(
-                        text = if (photoUrl.isNotBlank()) "Profile photo saved" else "No profile photo yet",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp
-                    )
+                    Text(if (photoUrl.isNotBlank()) "PROFILE PHOTO SAVED" else "NO PROFILE PHOTO YET", color = Color(0xFF00D9FF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 }
             }
         }
 
+        Spacer(modifier = Modifier.height(22.dp))
+        SectionTitle("PERSONAL INFORMATION")
+        Spacer(modifier = Modifier.height(11.dp))
+
+        ProfileField("FULL NAME", fullName, isEditing, { fullName = it })
+        Spacer(modifier = Modifier.height(9.dp))
+        ProfileField("EMAIL", email, false, {})
+        Spacer(modifier = Modifier.height(9.dp))
+        ProfileField("COLLEGE / UNIVERSITY", college, isEditing, { college = it })
+        Spacer(modifier = Modifier.height(9.dp))
+        ProfileField("COURSE / BRANCH", course, isEditing, { course = it })
+        Spacer(modifier = Modifier.height(9.dp))
+        ProfileField("SEMESTER", semester, isEditing, { semester = it })
+        Spacer(modifier = Modifier.height(9.dp))
+        ProfileField("CGPA", cgpa, isEditing, { cgpa = it })
+
         Spacer(modifier = Modifier.height(20.dp))
-
-        ProfileField(
-            label = "FULL NAME",
-            value = fullName,
-            enabled = isEditing,
-            onValueChange = { fullName = it }
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ProfileField(
-            label = "EMAIL",
-            value = email,
-            enabled = false,
-            onValueChange = {}
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ProfileField(
-            label = "COLLEGE / UNIVERSITY",
-            value = college,
-            enabled = isEditing,
-            onValueChange = { college = it }
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ProfileField(
-            label = "COURSE / BRANCH",
-            value = course,
-            enabled = isEditing,
-            onValueChange = { course = it }
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ProfileField(
-            label = "SEMESTER",
-            value = semester,
-            enabled = isEditing,
-            onValueChange = { semester = it }
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ProfileField(
-            label = "CGPA",
-            value = cgpa,
-            enabled = isEditing,
-            onValueChange = { cgpa = it }
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ProfileField(
-            label = "SKILLS",
-            value = skills,
-            enabled = isEditing,
-            minLines = 2,
-            onValueChange = { skills = it }
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ProfileField(
-            label = "ABOUT YOU",
-            value = about,
-            enabled = isEditing,
-            minLines = 4,
-            onValueChange = { about = it }
-        )
+        SectionTitle("ABOUT YOUR JOURNEY")
+        Spacer(modifier = Modifier.height(11.dp))
+        ProfileField("SKILLS", skills, isEditing, { skills = it }, minLines = 2)
+        Spacer(modifier = Modifier.height(9.dp))
+        ProfileField("ABOUT YOU", about, isEditing, { about = it }, minLines = 4)
 
         Spacer(modifier = Modifier.height(20.dp))
 
         if (isEditing) {
             Button(
                 onClick = {
-                    if (fullName.trim().isBlank()) {
-                        message = "Please enter your full name."
-                        messageIsError = true
-                        return@Button
-                    }
-                    if (college.trim().isBlank()) {
-                        message = "Please enter your college / university."
-                        messageIsError = true
-                        return@Button
-                    }
-                    if (course.trim().isBlank()) {
-                        message = "Please enter your course / branch."
-                        messageIsError = true
-                        return@Button
-                    }
+                    if (fullName.trim().isBlank()) { message = "Please enter your full name."; messageIsError = true; return@Button }
+                    if (college.trim().isBlank()) { message = "Please enter your college / university."; messageIsError = true; return@Button }
+                    if (course.trim().isBlank()) { message = "Please enter your course / branch."; messageIsError = true; return@Button }
 
                     isSaving = true
                     message = "Saving profile..."
@@ -4348,9 +4848,7 @@ private fun ProfileScreen(
                         "profileCompleted" to true
                     )
 
-                    firestore.collection("users")
-                        .document(user.uid)
-                        .set(profile, SetOptions.merge())
+                    firestore.collection("users").document(user.uid).set(profile, SetOptions.merge())
                         .addOnSuccessListener {
                             isSaving = false
                             isEditing = false
@@ -4367,51 +4865,33 @@ private fun ProfileScreen(
                 enabled = !isSaving,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
                 shape = RoundedCornerShape(15.dp)
-            ) {
-                Text(if (isSaving) "SAVING..." else "SAVE CHANGES", fontWeight = FontWeight.Bold)
-            }
+            ) { Text(if (isSaving) "SAVING..." else "SAVE CHANGES", fontWeight = FontWeight.Bold) }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedButton(
-                onClick = { isEditing = false; message = "" },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isSaving
-            ) {
-                Text("CANCEL")
+            Spacer(modifier = Modifier.height(9.dp))
+            OutlinedButton(onClick = { isEditing = false; message = "" }, modifier = Modifier.fillMaxWidth(), enabled = !isSaving, shape = RoundedCornerShape(15.dp)) {
+                Text("CANCEL", fontWeight = FontWeight.Bold)
             }
         } else {
             Button(
-                onClick = {
-                    message = ""
-                    isEditing = true
-                },
+                onClick = { message = ""; isEditing = true },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(15.dp)
-            ) {
-                Text("EDIT PROFILE", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-            }
+            ) { Text("EDIT PROFILE", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold) }
         }
 
         if (message.isNotBlank()) {
-            Spacer(modifier = Modifier.height(14.dp))
-            Text(
-                text = message,
-                color = if (messageIsError) Color(0xFFFF8A80) else Color(0xFFB9F6CA),
-                fontSize = 12.sp
-            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = if (messageIsError) Color(0xFF241416) else Color(0xFF14251A))
+            ) {
+                Text(message, color = if (messageIsError) Color(0xFFFF7B72) else Color(0xFF65E572), fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(13.dp))
+            }
         }
 
-        Spacer(modifier = Modifier.height(25.dp))
-
-        Text(
-            text = "Your profile is linked to your PRISM account, not to a single device.",
-            color = Color.Gray,
-            fontSize = 10.sp
-        )
-
-        Spacer(modifier = Modifier.height(30.dp))
+        Spacer(modifier = Modifier.height(28.dp))
     }
 }
 

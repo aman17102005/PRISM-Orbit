@@ -1,4 +1,3 @@
-
 package com.prismorbit.app
 
 import androidx.compose.foundation.Canvas
@@ -464,15 +463,31 @@ private fun GrowthContent(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "‹",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 40.sp,
-                modifier = Modifier.clickable { onBack() }
-            )
-            Spacer(Modifier.width(10.dp))
-            Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "‹",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Light
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "GROWTH",
                     color = MaterialTheme.colorScheme.onSurface,
@@ -483,9 +498,18 @@ private fun GrowthContent(
                     text = "CONNECTED DEVELOPMENT",
                     color = Color(0xFFFF4FD8),
                     fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
                     letterSpacing = 1.6.sp
                 )
             }
+
+            Text(
+                text = "LIVE",
+                color = Color(0xFF65E572),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.1.sp
+            )
         }
 
         Spacer(Modifier.height(22.dp))
@@ -657,13 +681,25 @@ private fun GrowthContent(
             fontSize = 10.sp
         )
         Spacer(Modifier.height(20.dp))
-        Text(
-            text = "REFRESH",
-            color = Color(0xFF00D9FF),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.clickable { onRefresh() }
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(15.dp)
+                )
+                .clickable { onRefresh() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "↻  REFRESH GROWTH DATA",
+                color = Color(0xFF00D9FF),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.1.sp
+            )
+        }
         Spacer(Modifier.height(30.dp))
     }
 }
@@ -675,10 +711,10 @@ private fun GrowthMetric(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(17.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(Modifier.padding(15.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -725,7 +761,9 @@ private fun GrowthStat(
         shape = RoundedCornerShape(15.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(Modifier.padding(12.dp)) {
+        Column(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp)
+        ) {
             Text(
                 text = title,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

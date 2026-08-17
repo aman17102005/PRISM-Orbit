@@ -27,6 +27,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -208,6 +209,12 @@ fun ProjectsScreen(
             }
     }
 
+    val completedCount = projects.count { it.status == "COMPLETED" }
+    val ongoingCount = projects.count {
+        it.status == "ONGOING" || it.status == "PLANNING"
+    }
+    val githubCount = projects.count { it.githubUrl.isNotBlank() }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -218,18 +225,28 @@ fun ProjectsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 18.dp),
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onBack) {
+                Box(
+                    modifier = Modifier
+                        .background(
+                            MaterialTheme.colorScheme.surface,
+                            RoundedCornerShape(13.dp)
+                        )
+                        .clickable { onBack() }
+                        .padding(horizontal = 13.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        "←",
+                        "‹",
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 28.sp
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Light
                     )
                 }
 
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(12.dp))
 
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -241,22 +258,32 @@ fun ProjectsScreen(
                     )
 
                     Text(
-                        "${projects.size} saved projects",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
+                        "PROJECT PORTFOLIO",
+                        color = ProjectPurple,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.7.sp
                     )
                 }
 
-                TextButton(
+                Button(
                     onClick = {
                         editingProject = null
                         errorMessage = ""
                         showEditor = true
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ProjectPurple
+                    ),
+                    contentPadding = PaddingValues(
+                        horizontal = 13.dp,
+                        vertical = 8.dp
+                    ),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
                         "+ ADD",
-                        color = ProjectPurple,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -275,7 +302,8 @@ fun ProjectsScreen(
                     Text(
                         errorMessage,
                         color = ProjectRed,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
                         modifier = Modifier.padding(15.dp)
                     )
                 }
@@ -311,6 +339,48 @@ fun ProjectsScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
+                        item {
+                            ProjectOverviewCard(
+                                total = projects.size,
+                                completed = completedCount,
+                                ongoing = ongoingCount,
+                                github = githubCount
+                            )
+                        }
+
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "YOUR PROJECTS",
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.5.sp
+                                    )
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(
+                                        "Your saved portfolio, all in one place.",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 9.sp
+                                    )
+                                }
+
+                                Text(
+                                    "${projects.size} TOTAL",
+                                    color = ProjectPurple,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+                        }
+
                         items(
                             items = projects,
                             key = { it.id }
@@ -607,6 +677,124 @@ fun ProjectsScreen(
 }
 
 @Composable
+private fun ProjectOverviewCard(
+    total: Int,
+    completed: Int,
+    ongoing: Int,
+    github: Int
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(Modifier.padding(19.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "PORTFOLIO OVERVIEW",
+                        color = ProjectTextSecondary,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.8.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Build. Ship. Showcase.",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Keep your strongest work visible and organised.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp
+                    )
+                }
+
+                Text(
+                    total.toString(),
+                    color = ProjectPurple,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(17.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                ProjectStat(
+                    modifier = Modifier.weight(1f),
+                    label = "TOTAL",
+                    value = total.toString(),
+                    accent = ProjectPurple
+                )
+                ProjectStat(
+                    modifier = Modifier.weight(1f),
+                    label = "ACTIVE",
+                    value = ongoing.toString(),
+                    accent = ProjectOrange
+                )
+                ProjectStat(
+                    modifier = Modifier.weight(1f),
+                    label = "DONE",
+                    value = completed.toString(),
+                    accent = ProjectGreen
+                )
+                ProjectStat(
+                    modifier = Modifier.weight(1f),
+                    label = "GITHUB",
+                    value = github.toString(),
+                    accent = Color(0xFF00D9FF)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectStat(
+    modifier: Modifier,
+    label: String,
+    value: String,
+    accent: Color
+) {
+    Column(
+        modifier = modifier
+            .background(
+                Color(0xFF202027),
+                RoundedCornerShape(14.dp)
+            )
+            .padding(10.dp)
+    ) {
+        Text(
+            label,
+            color = ProjectTextSecondary,
+            fontSize = 7.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.9.sp
+        )
+        Spacer(Modifier.height(5.dp))
+        Text(
+            value,
+            color = accent,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
 private fun EmptyProjectsState(
     onAddProject: () -> Unit
 ) {
@@ -616,34 +804,50 @@ private fun EmptyProjectsState(
             .padding(30.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                "NO PROJECTS YET",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
             )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                "Your saved projects will appear here.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 13.sp
-            )
-
-            Spacer(Modifier.height(20.dp))
-
-            Button(
-                onClick = onAddProject,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ProjectPurple
-                )
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "+  ADD PROJECT",
-                    fontWeight = FontWeight.Bold
+                    "NO PROJECTS YET",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.8.sp
                 )
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    "Start building your portfolio by adding your first project.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+
+                Spacer(Modifier.height(18.dp))
+
+                Button(
+                    onClick = onAddProject,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ProjectPurple
+                    ),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(
+                        "+  ADD PROJECT",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
+                    )
+                }
             }
         }
     }
@@ -655,9 +859,14 @@ private fun ProjectCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val githubAccessible =
+        project.githubEvidence["isAccessible"] as? Boolean ?: false
+    val sourceFiles =
+        (project.githubEvidence["sourceFileCount"] as? Number)?.toInt() ?: 0
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(21.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
@@ -670,7 +879,9 @@ private fun ProjectCard(
                         project.name,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     Spacer(Modifier.height(5.dp))
@@ -678,34 +889,22 @@ private fun ProjectCard(
                     Text(
                         project.majorTopic,
                         color = ProjectPurple,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
                     )
                 }
 
-                TextButton(onClick = onEdit) {
-                    Text(
-                        "EDIT",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 11.sp
-                    )
-                }
-
-                TextButton(onClick = onDelete) {
-                    Text(
-                        "DELETE",
-                        color = ProjectRed,
-                        fontSize = 11.sp
-                    )
-                }
+                ProjectStatusChip(project.status)
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
 
             Text(
                 project.description,
                 color = Color(0xFFCCCCD2),
-                fontSize = 13.sp,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis
             )
@@ -713,39 +912,104 @@ private fun ProjectCard(
             Spacer(Modifier.height(14.dp))
 
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ProjectInfoChip(project.codingLanguage)
-                ProjectStatusChip(project.status)
+                ProjectInfoChip(
+                    text = project.codingLanguage,
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (project.githubUrl.isNotBlank()) {
+                    ProjectGithubChip(
+                        accessible = githubAccessible,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             if (project.githubEvidence.isNotEmpty()) {
-                val githubAccessible =
-                    project.githubEvidence["isAccessible"] as? Boolean ?: false
-                val sourceFiles =
-                    (project.githubEvidence["sourceFileCount"] as? Number)?.toInt() ?: 0
-
                 Spacer(Modifier.height(10.dp))
 
-                Text(
-                    if (githubAccessible) {
-                        "GitHub analyzed • $sourceFiles source files detected"
-                    } else {
-                        "GitHub analysis unavailable"
-                    },
-                    color = if (githubAccessible) ProjectGreen else ProjectOrange,
-                    fontSize = 10.sp
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (githubAccessible) {
+                                Color(0xFF14261A)
+                            } else {
+                                Color(0xFF2A2116)
+                            },
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 11.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (githubAccessible) "✓" else "!",
+                        color = if (githubAccessible) ProjectGreen else ProjectOrange,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Text(
+                        if (githubAccessible) {
+                            "GitHub analyzed • $sourceFiles source files detected"
+                        } else {
+                            "GitHub analysis unavailable"
+                        },
+                        color = if (githubAccessible) ProjectGreen else ProjectOrange,
+                        fontSize = 9.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             if (project.completionDate.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
 
                 Text(
-                    "Completed: ${project.completionDate}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp
+                    "COMPLETED  •  ${project.completionDate}",
+                    color = ProjectTextSecondary,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp
                 )
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onEdit,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(11.dp)
+                ) {
+                    Text(
+                        "EDIT",
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onDelete,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(11.dp)
+                ) {
+                    Text(
+                        "DELETE",
+                        color = ProjectRed,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
@@ -753,23 +1017,55 @@ private fun ProjectCard(
 
 @Composable
 private fun ProjectInfoChip(
-    text: String
+    text: String,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .background(
                 color = Color(0xFF202027),
-                shape = RoundedCornerShape(50.dp)
+                shape = RoundedCornerShape(11.dp)
             )
             .padding(
                 horizontal = 10.dp,
-                vertical = 6.dp
+                vertical = 7.dp
             )
     ) {
         Text(
             text,
             color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 10.sp
+            fontSize = 9.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun ProjectGithubChip(
+    accessible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val accent = if (accessible) ProjectGreen else ProjectOrange
+
+    Box(
+        modifier = modifier
+            .background(
+                color = accent.copy(alpha = 0.10f),
+                shape = RoundedCornerShape(11.dp)
+            )
+            .padding(
+                horizontal = 10.dp,
+                vertical = 7.dp
+            )
+    ) {
+        Text(
+            if (accessible) "GITHUB VERIFIED" else "GITHUB LINK",
+            color = accent,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -791,18 +1087,19 @@ private fun ProjectStatusChip(
         modifier = Modifier
             .background(
                 color = statusColor.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(50.dp)
+                shape = RoundedCornerShape(10.dp)
             )
             .padding(
-                horizontal = 10.dp,
-                vertical = 6.dp
+                horizontal = 9.dp,
+                vertical = 7.dp
             )
     ) {
         Text(
             status,
             color = statusColor,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold
+            fontSize = 7.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.6.sp
         )
     }
 }
@@ -856,26 +1153,33 @@ private fun ProjectEditor(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp)
         ) {
-
             item {
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(
-                        onClick = onDismiss,
-                        enabled = !saving
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                MaterialTheme.colorScheme.surface,
+                                RoundedCornerShape(13.dp)
+                            )
+                            .clickable(enabled = !saving) {
+                                onDismiss()
+                            }
+                            .padding(horizontal = 13.dp, vertical = 8.dp)
                     ) {
                         Text(
-                            "←",
+                            "‹",
                             color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 28.sp
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Light
                         )
                     }
 
-                    Spacer(Modifier.width(5.dp))
+                    Spacer(Modifier.width(12.dp))
 
                     Column {
                         Text(
@@ -892,11 +1196,19 @@ private fun ProjectEditor(
                         Text(
                             "PROJECT PORTFOLIO",
                             color = ProjectPurple,
-                            fontSize = 9.sp,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
                             letterSpacing = 1.5.sp
                         )
                     }
                 }
+            }
+
+            item {
+                ProjectFormSectionTitle(
+                    title = "PROJECT DETAILS",
+                    subtitle = "Tell PRISM what you built."
+                )
             }
 
             item {
@@ -956,6 +1268,13 @@ private fun ProjectEditor(
             }
 
             item {
+                ProjectFormSectionTitle(
+                    title = "GITHUB EVIDENCE",
+                    subtitle = "Add a repository URL if you want PRISM to analyze it."
+                )
+            }
+
+            item {
                 OutlinedTextField(
                     value = githubUrl,
                     onValueChange = { githubUrl = it },
@@ -972,8 +1291,14 @@ private fun ProjectEditor(
             }
 
             item {
-                Box(Modifier.fillMaxWidth()) {
+                ProjectFormSectionTitle(
+                    title = "PROJECT STATUS",
+                    subtitle = "Keep your portfolio state up to date."
+                )
+            }
 
+            item {
+                Box(Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = status,
                         onValueChange = {},
@@ -1034,7 +1359,7 @@ private fun ProjectEditor(
             }
 
             item {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(7.dp))
 
                 Button(
                     onClick = {
@@ -1094,5 +1419,32 @@ private fun ProjectEditor(
                 Spacer(Modifier.height(30.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun ProjectFormSectionTitle(
+    title: String,
+    subtitle: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp)
+    ) {
+        Text(
+            title,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.4.sp
+        )
+        Spacer(Modifier.height(3.dp))
+        Text(
+            subtitle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 9.sp,
+            lineHeight = 14.sp
+        )
     }
 }
