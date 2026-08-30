@@ -46,6 +46,15 @@ import com.google.firebase.auth.userProfileChangeRequest
 import com.google.firebase.firestore.FirebaseFirestore
 import com.prismorbit.app.ui.theme.PRISMOrbitTheme
 import kotlinx.coroutines.delay
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 
 
 // ============================================================================
@@ -71,11 +80,22 @@ class MainActivity : ComponentActivity() {
     private lateinit var firebaseAuth: FirebaseAuth
     private lateinit var firestore: FirebaseFirestore
 
+    private val notificationPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         firebaseAuth = FirebaseAuth.getInstance()
         firestore = FirebaseFirestore.getInstance()
+
+        PrismNotifications.ensureChannel(this)
+        requestNotificationPermissionIfNeeded()
+        scheduleReminderWorker()
+
+
 
         setContent {
             PRISMOrbitTheme(
@@ -92,9 +112,6 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Restore the saved appearance preference when a signed-in
-                // user opens the app. SettingsScreen also updates the shared
-                // state immediately when the user taps an appearance option.
                 LaunchedEffect(firebaseAuth.currentUser?.uid) {
                     val uid = firebaseAuth.currentUser?.uid ?: return@LaunchedEffect
 
@@ -151,8 +168,35 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-}
 
+    private fun requestNotificationPermissionIfNeeded() {
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+        }
+    }
+
+    private fun scheduleReminderWorker() {
+        val request =
+            PeriodicWorkRequestBuilder<PrismReminderWorker>(
+                24,
+                TimeUnit.HOURS
+            ).build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "prism_academic_reminders",
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
+    }
+}
 // ============================================================================
 // EMAIL AUTHENTICATION SCREEN
 // ============================================================================
