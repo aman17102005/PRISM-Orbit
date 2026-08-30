@@ -1,3 +1,4 @@
+
 package com.prismorbit.app
 
 import android.graphics.Bitmap
@@ -672,6 +673,19 @@ private fun deleteProject(
 // HOME SCREEN
 // =========================================================
 
+private fun displayInitials(fullName: String): String {
+    val parts = fullName
+        .trim()
+        .split(Regex("\\s+"))
+        .filter { it.isNotBlank() }
+
+    return when {
+        parts.isEmpty() -> ""
+        parts.size == 1 -> parts.first().first().uppercaseChar().toString()
+        else -> "${parts.first().first().uppercaseChar()}${parts.last().first().uppercaseChar()}"
+    }
+}
+
 @Composable
 fun HomeScreen(onLogout: () -> Unit = {}) {
     val auth = FirebaseAuth.getInstance()
@@ -1313,7 +1327,7 @@ private fun DashboardScreen(
             ) {
 
                 Text(
-                    text = userFirstName,
+                    text = displayInitials(userFirstName).takeIf { it.isNotEmpty() } ?: "?",
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
