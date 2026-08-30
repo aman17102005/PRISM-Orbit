@@ -707,6 +707,8 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
     var internshipCount by remember { mutableStateOf(0) }
     var placementReadiness by remember { mutableStateOf<Int?>(null) }
     var growthScore by remember { mutableStateOf<Int?>(null) }
+    var showSmartAiChatScreen by remember { mutableStateOf(false) }
+
 // =====================================================
 // SMART AI STATE
 // =====================================================
@@ -1208,7 +1210,14 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
                 growthScore = score
             }
         )
-    } else {
+
+    }
+    else if (showSmartAiChatScreen) {
+        SmartAiChatScreen(
+            onBack = { showSmartAiChatScreen = false }
+        )
+    }
+    else {
         DashboardScreen(
             dsaProblems = dsaProblems,
             currentCgpa = academicRecord.currentCgpa,
@@ -1233,7 +1242,8 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
 
             smartAiInsight = smartAiInsight,
             smartAiLoading = smartAiLoading,
-            smartAiError = smartAiError
+            smartAiError = smartAiError,
+            onSmartAiChatClick = { showSmartAiChatScreen = true }
         )
     }
 }
@@ -1262,7 +1272,8 @@ private fun DashboardScreen(
     onSettingsClick: () -> Unit,
     smartAiInsight: SmartAiInsight?,
     smartAiLoading: Boolean,
-    smartAiError: String
+    smartAiError: String,
+    onSmartAiChatClick: () -> Unit
 ) {
 
     val dsaScore = calculateDsaProgress(dsaProblems)
@@ -1536,7 +1547,9 @@ private fun DashboardScreen(
         // =====================================================
 
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onSmartAiChatClick() },
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
