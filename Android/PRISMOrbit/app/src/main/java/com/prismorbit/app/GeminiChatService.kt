@@ -74,7 +74,7 @@ private object GeminiChatNetwork {
     private val client = OkHttpClient.Builder()
         .addInterceptor(logging)
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
         .build()
 
     private val retrofit = Retrofit.Builder()
