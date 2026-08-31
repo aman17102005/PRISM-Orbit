@@ -48,9 +48,10 @@ import kotlinx.coroutines.launch
 // ============================================================
 
 private data class DisplayMessage(
-    val role: String,
+    val role: String, // "user" or "model"
     val text: String,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val promptText: String = text
 )
 
 private val SUGGESTED_PROMPTS = listOf(
@@ -140,17 +141,16 @@ fun SmartAiChatScreen(onBack: () -> Unit) {
     // SEND MESSAGE
     // ========================================================
 
-    fun sendMessage(text: String) {
-
+    fun sendMessage(
+        text: String,
+        displayText: String = text
+    ) {
         val trimmed = text.trim()
         val currentContext = context
 
-        if (trimmed.isBlank() || isSending) {
-            return
-        }
+        if (trimmed.isBlank() || isSending) return
 
         if (currentContext == null) {
-
             messages.add(
                 DisplayMessage(
                     role = "model",
@@ -158,25 +158,23 @@ fun SmartAiChatScreen(onBack: () -> Unit) {
                     isError = true
                 )
             )
-
             return
         }
 
-        // Error bubbles are UI-only.
-        // They are never sent back to Gemini as conversation history.
         val historyBeforeThisMessage = messages
             .filterNot { it.isError }
             .map {
                 ChatTurn(
                     role = it.role,
-                    text = it.text
+                    text = it.promptText
                 )
             }
 
         messages.add(
             DisplayMessage(
                 role = "user",
-                text = trimmed
+                text = displayText.trim().ifBlank { trimmed },
+                promptText = trimmed
             )
         )
 
@@ -306,10 +304,36 @@ fun SmartAiChatScreen(onBack: () -> Unit) {
             }
 
             // =================================================
+            // REPORT BUTTON
+            // =================================================
+
+            Text(
+                text = "REPORT",
+                color = Color(0xFF00D9FF),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier
+                    .clickable(
+                        enabled = !isSending && !contextLoading
+                    ) {
+                        sendMessage(
+                            text = SmartAiPrompts.DAILY_REPORT_PROMPT,
+                            displayText = SmartAiPrompts.DAILY_REPORT_DISPLAY_TEXT
+                        )
+                    }
+                    .padding(8.dp)
+            )
+
+            // =================================================
             // CLEAR BUTTON
             // =================================================
 
             if (messages.isNotEmpty()) {
+
+                Spacer(
+                    modifier = Modifier.width(4.dp)
+                )
 
                 Box(
                     modifier = Modifier

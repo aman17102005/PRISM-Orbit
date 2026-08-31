@@ -97,6 +97,9 @@ object GeminiChatService {
         Be warm, direct and practical — like a good mentor, not a generic chatbot.
         Keep responses reasonably concise unless the student asks for detail.
         If asked "why" about a recommendation, explain using the reason given below.
+        If asked for a structured report using specific headers (e.g. HIGH
+        PRIORITY / MEDIUM PRIORITY / OPTIONAL), follow that exact format
+        rather than writing free-form prose.
     """
 
     suspend fun sendMessage(
