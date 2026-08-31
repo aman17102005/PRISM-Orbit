@@ -638,7 +638,9 @@ fun SmartAiChatScreen(
                     .background(
                         MaterialTheme.colorScheme.surface
                     )
-                    .clickable {
+                    .clickable(
+                        onClickLabel = "Go back"
+                    ) {
                         stopSpeaking()
                         onBack()
                     },
@@ -755,7 +757,9 @@ fun SmartAiChatScreen(
                     },
                 fontSize = 14.sp,
                 modifier = Modifier
-                    .clickable {
+                    .clickable(
+                        onClickLabel = "Toggle spoken responses"
+                    ) {
 
                         voiceOutputEnabled =
                             !voiceOutputEnabled
@@ -1121,7 +1125,8 @@ fun SmartAiChatScreen(
                     .clickable(
                         enabled =
                             !isSending &&
-                                    !contextLoading
+                                    !contextLoading,
+                        onClickLabel = "Voice input"
                     ) {
 
                         if (isListening) {
@@ -1185,7 +1190,8 @@ fun SmartAiChatScreen(
                     .clickable(
                         enabled =
                             inputText.isNotBlank() &&
-                                    !isSending
+                                    !isSending,
+                        onClickLabel = "Send message"
                     ) {
 
                         sendMessage(inputText)
