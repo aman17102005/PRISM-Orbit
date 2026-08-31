@@ -142,7 +142,9 @@ object GeminiChatService {
 
         if (apiKey.isBlank()) {
             return Result.failure(
-                IllegalStateException("Missing Gemini API key")
+                IllegalStateException(
+                    "Smart AI isn't configured yet — missing API key."
+                )
             )
         }
 
@@ -201,7 +203,9 @@ object GeminiChatService {
             if (replyText.isNullOrBlank()) {
 
                 Result.failure(
-                    Exception("Empty response from Smart AI")
+                    Exception(
+                        "Smart AI didn't return a response — try again in a moment."
+                    )
                 )
 
             } else {
@@ -211,7 +215,45 @@ object GeminiChatService {
 
         } catch (e: Exception) {
 
-            Result.failure(e)
+            Result.failure(
+                Exception(
+                    friendlyErrorMessage(e)
+                )
+            )
+        }
+    }
+
+    // ============================================================
+    // PHASE 11 — friendly, classified error messages
+    // ============================================================
+    // Order matters: more specific exception types are checked before
+    // their broader parent types (e.g. SocketTimeoutException is-a
+    // IOException, so it must be checked first or it would never be
+    // reached).
+    // ============================================================
+    private fun friendlyErrorMessage(e: Exception): String {
+        return when {
+            e is java.net.UnknownHostException ->
+                "No internet connection — check your connection and try again."
+
+            e is java.net.SocketTimeoutException ->
+                "Smart AI took too long to respond — try again."
+
+            e is retrofit2.HttpException && e.code() == 429 ->
+                "Smart AI is temporarily busy (rate limit reached) — try again in a moment."
+
+            e is retrofit2.HttpException &&
+                    (e.code() == 401 || e.code() == 403) ->
+                "Smart AI couldn't authenticate with Gemini — the API key may be invalid."
+
+            e is retrofit2.HttpException ->
+                "Smart AI's server returned an error (code ${e.code()}) — try again in a moment."
+
+            e is java.io.IOException ->
+                "No internet connection — check your connection and try again."
+
+            else ->
+                e.message ?: "Something went wrong — try again in a moment."
         }
     }
 }

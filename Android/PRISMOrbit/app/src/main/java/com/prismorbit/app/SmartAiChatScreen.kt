@@ -47,7 +47,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +57,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import java.util.Locale
+import androidx.compose.ui.draw.clip
 
 
 // ============================================================
@@ -450,9 +450,26 @@ fun SmartAiChatScreen(
 
             } catch (e: Exception) {
 
+                // Phase 11 — friendly, classified error messages
                 contextError =
-                    e.message
-                        ?: "Unable to load your PRISM data right now."
+                    when {
+
+                        e is java.net.UnknownHostException ||
+                                e is java.io.IOException ->
+                            "No internet connection — check your connection and try again."
+
+                        e is com.google.firebase.firestore.FirebaseFirestoreException &&
+                                e.code ==
+                                com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED ->
+                            "Smart AI couldn't access your PRISM data — try signing out and back in."
+
+                        e is com.google.firebase.firestore.FirebaseFirestoreException ->
+                            "Unable to load your PRISM data right now — try again in a moment."
+
+                        else ->
+                            e.message
+                                ?: "Unable to load your PRISM data right now."
+                    }
 
             } finally {
 
