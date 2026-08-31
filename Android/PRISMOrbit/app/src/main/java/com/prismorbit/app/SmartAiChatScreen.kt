@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 
 // ============================================================
 // SMART AI CHAT SCREEN
@@ -478,6 +480,64 @@ fun SmartAiChatScreen(onBack: () -> Unit) {
                                     color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 12.sp
                                 )
+                            }
+                        }
+                        Spacer(
+                            modifier = Modifier.height(6.dp)
+                        )
+
+                        Text(
+                            text = "PLAN MY DAY",
+                            color = Color(0xFFB76CFF),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.5.sp
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(8.dp)
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(
+                                    rememberScrollState()
+                                ),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            SmartAiPlanningPrompts.DURATION_OPTIONS.forEach { option ->
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                        .background(
+                                            MaterialTheme.colorScheme.surface
+                                        )
+                                        .clickable(
+                                            enabled = !isSending && !contextLoading
+                                        ) {
+                                            sendMessage(
+                                                text = SmartAiPlanningPrompts.buildPlanningMessage(
+                                                    option.second
+                                                ),
+                                                displayText = "Plan my day for ${option.first}"
+                                            )
+                                        }
+                                        .padding(
+                                            horizontal = 14.dp,
+                                            vertical = 10.dp
+                                        )
+                                ) {
+                                    Text(
+                                        text = option.first,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                         }
                     }

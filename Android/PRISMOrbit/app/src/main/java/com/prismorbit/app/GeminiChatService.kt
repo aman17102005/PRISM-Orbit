@@ -56,6 +56,7 @@ private data class ChatCandidate(
 )
 
 private interface GeminiChatApiService {
+
     @POST("v1beta/models/{model}:generateContent")
     suspend fun generateContent(
         @Path("model") model: String = "gemini-3.6-flash",
@@ -65,6 +66,7 @@ private interface GeminiChatApiService {
 }
 
 private object GeminiChatNetwork {
+
     private val logging = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BASIC
     }
@@ -81,7 +83,8 @@ private object GeminiChatNetwork {
         .addConverterFactory(GsonConverterFactory.create())
         .build()
 
-    val service: GeminiChatApiService = retrofit.create(GeminiChatApiService::class.java)
+    val service: GeminiChatApiService =
+        retrofit.create(GeminiChatApiService::class.java)
 }
 
 object GeminiChatService {
@@ -100,6 +103,10 @@ object GeminiChatService {
         If asked for a structured report using specific headers (e.g. HIGH
         PRIORITY / MEDIUM PRIORITY / OPTIONAL), follow that exact format
         rather than writing free-form prose.
+        When asked to create a time-based plan, only use real events, deadlines,
+        or progress data provided above. If there isn't enough concrete PRISM
+        data to fill the requested time, say so plainly rather than inventing
+        filler tasks.
     """
 
     suspend fun sendMessage(
@@ -110,40 +117,76 @@ object GeminiChatService {
     ): Result<String> {
 
         if (apiKey.isBlank()) {
-            return Result.failure(IllegalStateException("Missing Gemini API key"))
+            return Result.failure(
+                IllegalStateException("Missing Gemini API key")
+            )
         }
 
         return try {
-            val systemText = SYSTEM_PERSONA.trimIndent() + "\n\n" + prismContext.toPromptText()
 
-            val contents = history.map { turn ->
-                ChatContent(role = turn.role, parts = listOf(ChatPart(text = turn.text)))
-            } + ChatContent(role = "user", parts = listOf(ChatPart(text = newUserMessage)))
+            val systemText =
+                SYSTEM_PERSONA.trimIndent() +
+                        "\n\n" +
+                        prismContext.toPromptText()
+
+            val contents =
+                history.map { turn ->
+                    ChatContent(
+                        role = turn.role,
+                        parts = listOf(
+                            ChatPart(
+                                text = turn.text
+                            )
+                        )
+                    )
+                } +
+                        ChatContent(
+                            role = "user",
+                            parts = listOf(
+                                ChatPart(
+                                    text = newUserMessage
+                                )
+                            )
+                        )
 
             val request = GeminiChatRequest(
-                systemInstruction = SystemInstruction(parts = listOf(ChatPart(text = systemText))),
+                systemInstruction = SystemInstruction(
+                    parts = listOf(
+                        ChatPart(
+                            text = systemText
+                        )
+                    )
+                ),
                 contents = contents
             )
 
-            val response = GeminiChatNetwork.service.generateContent(
-                apiKey = apiKey,
-                request = request
-            )
+            val response =
+                GeminiChatNetwork.service.generateContent(
+                    apiKey = apiKey,
+                    request = request
+                )
 
-            val replyText = response.candidates
-                ?.firstOrNull()
-                ?.content
-                ?.parts
-                ?.firstOrNull()
-                ?.text
+            val replyText =
+                response.candidates
+                    ?.firstOrNull()
+                    ?.content
+                    ?.parts
+                    ?.firstOrNull()
+                    ?.text
 
             if (replyText.isNullOrBlank()) {
-                Result.failure(Exception("Empty response from Smart AI"))
+
+                Result.failure(
+                    Exception("Empty response from Smart AI")
+                )
+
             } else {
+
                 Result.success(replyText)
             }
 
         } catch (e: Exception) {
+
             Result.failure(e)
         }
     }
