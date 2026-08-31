@@ -6,6 +6,8 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.speech.RecognizerIntent
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -35,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -46,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,7 +57,7 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
-import androidx.compose.ui.platform.LocalContext
+import java.util.Locale
 
 
 // ============================================================
@@ -131,6 +135,110 @@ fun SmartAiChatScreen(
 
     var isListening by remember {
         mutableStateOf(false)
+    }
+
+
+    // ========================================================
+    // PHASE 9 — TEXT-TO-SPEECH STATE
+    // ========================================================
+
+    var ttsEngine by remember {
+        mutableStateOf<TextToSpeech?>(null)
+    }
+
+    var ttsReady by remember {
+        mutableStateOf(false)
+    }
+
+    var voiceOutputEnabled by remember {
+        mutableStateOf(true)
+    }
+
+    var isSpeaking by remember {
+        mutableStateOf(false)
+    }
+
+
+    // ========================================================
+    // PHASE 9 — TEXT-TO-SPEECH INITIALIZATION + CLEANUP
+    // ========================================================
+
+    DisposableEffect(Unit) {
+
+        val engine =
+            TextToSpeech(localContext) { status ->
+
+                ttsReady =
+                    status == TextToSpeech.SUCCESS
+            }
+
+        engine.setOnUtteranceProgressListener(
+            object : UtteranceProgressListener() {
+
+                override fun onStart(
+                    utteranceId: String?
+                ) {
+                    isSpeaking = true
+                }
+
+                override fun onDone(
+                    utteranceId: String?
+                ) {
+                    isSpeaking = false
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun onError(
+                    utteranceId: String?
+                ) {
+                    isSpeaking = false
+                }
+            }
+        )
+
+        ttsEngine = engine
+
+        onDispose {
+
+            engine.stop()
+            engine.shutdown()
+        }
+    }
+
+
+    // ========================================================
+    // PHASE 9 — SPEAK / STOP HELPERS
+    // ========================================================
+
+    fun speak(text: String) {
+
+        if (
+            !voiceOutputEnabled ||
+            !ttsReady
+        ) {
+            return
+        }
+
+        val engine =
+            ttsEngine
+                ?: return
+
+        engine.language =
+            Locale.getDefault()
+
+        engine.speak(
+            text,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            "prism_smart_ai_reply"
+        )
+    }
+
+
+    fun stopSpeaking() {
+
+        ttsEngine?.stop()
+        isSpeaking = false
     }
 
 
@@ -443,6 +551,12 @@ fun SmartAiChatScreen(
                             text = reply
                         )
                     )
+
+                    // =================================================
+                    // PHASE 9 — SPEAK REAL AI REPLY
+                    // =================================================
+
+                    speak(reply)
                 }
                 .onFailure { error ->
 
@@ -494,6 +608,10 @@ fun SmartAiChatScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
 
+            // =================================================
+            // BACK BUTTON
+            // =================================================
+
             Box(
                 modifier = Modifier
                     .size(42.dp)
@@ -504,6 +622,7 @@ fun SmartAiChatScreen(
                         MaterialTheme.colorScheme.surface
                     )
                     .clickable {
+                        stopSpeaking()
                         onBack()
                     },
                 contentAlignment = Alignment.Center
@@ -572,6 +691,61 @@ fun SmartAiChatScreen(
                             displayText =
                                 SmartAiPrompts.DAILY_REPORT_DISPLAY_TEXT
                         )
+                    }
+                    .padding(8.dp)
+            )
+
+
+            // =================================================
+            // PHASE 9 — STOP SPEAKING
+            // =================================================
+
+            if (isSpeaking) {
+
+                Spacer(
+                    modifier = Modifier.width(4.dp)
+                )
+
+                Text(
+                    text = "STOP",
+                    color = Color(0xFFFF7B72),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier
+                        .clickable {
+                            stopSpeaking()
+                        }
+                        .padding(8.dp)
+                )
+            }
+
+
+            // =================================================
+            // PHASE 9 — SPEAKER TOGGLE
+            // =================================================
+
+            Spacer(
+                modifier = Modifier.width(4.dp)
+            )
+
+            Text(
+                text =
+                    if (voiceOutputEnabled) {
+                        "🔊"
+                    } else {
+                        "🔇"
+                    },
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .clickable {
+
+                        voiceOutputEnabled =
+                            !voiceOutputEnabled
+
+                        if (!voiceOutputEnabled) {
+                            stopSpeaking()
+                        }
                     }
                     .padding(8.dp)
             )
