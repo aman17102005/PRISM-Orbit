@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -57,15 +61,13 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import java.util.Locale
-import androidx.compose.ui.draw.clip
-
 
 // ============================================================
 // SMART AI CHAT SCREEN
 // ============================================================
 
 private data class DisplayMessage(
-    val role: String, // "user" or "model"
+    val role: String,
     val text: String,
     val isError: Boolean = false,
     val promptText: String = text
@@ -76,7 +78,6 @@ private val SUGGESTED_PROMPTS = listOf(
     "How's my placement prep going?",
     "I have 2 hours today, what should I focus on?"
 )
-
 
 // ============================================================
 // COMPOSABLE
@@ -109,7 +110,7 @@ fun SmartAiChatScreen(
     }
 
     var contextLoading by remember {
-        mutableStateOf(true)
+        mutableStateOf(false)
     }
 
     val messages = remember {
@@ -124,22 +125,51 @@ fun SmartAiChatScreen(
         mutableStateOf(false)
     }
 
-
     // ========================================================
-    // VOICE STATE
+    // BYOK
     // ========================================================
 
-    var voiceError by remember {
-        mutableStateOf("")
+    var storedKey by remember {
+        mutableStateOf<StoredAiKey?>(null)
     }
 
-    var isListening by remember {
+    var apiKeyChecked by remember {
         mutableStateOf(false)
     }
 
+    var showApiKeySetup by remember {
+        mutableStateOf(false)
+    }
 
     // ========================================================
-    // PHASE 9 — TEXT-TO-SPEECH STATE
+    // LOAD USER API KEY
+    // ========================================================
+
+    LaunchedEffect(
+        uid,
+        AiKeyRefreshSignal.version
+    ) {
+
+        val currentUid = uid
+
+        storedKey =
+            if (currentUid != null) {
+
+                AiApiKeyManager.getKey(
+                    localContext,
+                    currentUid
+                )
+
+            } else {
+
+                null
+            }
+
+        apiKeyChecked = true
+    }
+
+    // ========================================================
+    // TEXT TO SPEECH
     // ========================================================
 
     var ttsEngine by remember {
@@ -158,40 +188,179 @@ fun SmartAiChatScreen(
         mutableStateOf(false)
     }
 
+    // Latest successful AI response.
+    var latestAiReply by remember {
+        mutableStateOf("")
+    }
+
+    // If TTS isn't ready when a reply arrives, keep it here.
+    var pendingSpeech by remember {
+        mutableStateOf("")
+    }
 
     // ========================================================
-    // PHASE 9 — TEXT-TO-SPEECH INITIALIZATION + CLEANUP
+    // VOICE INPUT
     // ========================================================
 
-    DisposableEffect(Unit) {
+    var voiceError by remember {
+        mutableStateOf("")
+    }
 
-        val engine =
-            TextToSpeech(localContext) { status ->
+    var isListening by remember {
+        mutableStateOf(false)
+    }
 
-                ttsReady =
-                    status == TextToSpeech.SUCCESS
+    // ========================================================
+    // TTS INITIALIZATION
+    // ========================================================
+
+    val mainHandler =
+        remember {
+            Handler(Looper.getMainLooper())
+        }
+
+    DisposableEffect(localContext) {
+
+        lateinit var engine: TextToSpeech
+
+        engine =
+            TextToSpeech(
+                localContext
+            ) { status ->
+
+                // TTS callbacks can happen asynchronously.
+                // Always update/use the engine on the main thread.
+                mainHandler.post {
+
+                    if (status != TextToSpeech.SUCCESS) {
+
+                        ttsReady = false
+                        ttsEngine = null
+
+                        return@post
+                    }
+
+                    try {
+
+                        var languageResult =
+                            engine.setLanguage(
+                                Locale("en", "IN")
+                            )
+
+                        // If Indian English isn't available, try US English.
+                        if (
+                            languageResult ==
+                            TextToSpeech.LANG_MISSING_DATA ||
+                            languageResult ==
+                            TextToSpeech.LANG_NOT_SUPPORTED
+                        ) {
+
+                            languageResult =
+                                engine.setLanguage(
+                                    Locale.US
+                                )
+                        }
+
+                        // Last fallback: device default language.
+                        if (
+                            languageResult ==
+                            TextToSpeech.LANG_MISSING_DATA ||
+                            languageResult ==
+                            TextToSpeech.LANG_NOT_SUPPORTED
+                        ) {
+
+                            languageResult =
+                                engine.setLanguage(
+                                    Locale.getDefault()
+                                )
+                        }
+
+                        if (
+                            languageResult ==
+                            TextToSpeech.LANG_MISSING_DATA ||
+                            languageResult ==
+                            TextToSpeech.LANG_NOT_SUPPORTED
+                        ) {
+
+                            ttsReady = false
+                            ttsEngine = null
+
+                            return@post
+                        }
+
+                        ttsEngine = engine
+                        ttsReady = true
+
+                        // If an AI reply arrived before TTS finished
+                        // initializing, speak it now.
+                        val queuedText =
+                            pendingSpeech.trim()
+
+                        if (
+                            voiceOutputEnabled &&
+                            queuedText.isNotBlank()
+                        ) {
+
+                            pendingSpeech = ""
+
+                            val result =
+                                engine.speak(
+                                    queuedText,
+                                    TextToSpeech.QUEUE_FLUSH,
+                                    null,
+                                    "prism_smart_ai_reply"
+                                )
+
+                            if (
+                                result ==
+                                TextToSpeech.ERROR
+                            ) {
+
+                                pendingSpeech = queuedText
+                                isSpeaking = false
+                            }
+                        }
+
+                    } catch (_: Exception) {
+
+                        ttsReady = false
+                        ttsEngine = null
+                        isSpeaking = false
+                    }
+                }
             }
 
+        // Set the listener immediately so no utterance-progress
+        // callback is missed.
         engine.setOnUtteranceProgressListener(
             object : UtteranceProgressListener() {
 
                 override fun onStart(
                     utteranceId: String?
                 ) {
-                    isSpeaking = true
+
+                    mainHandler.post {
+                        isSpeaking = true
+                    }
                 }
 
                 override fun onDone(
                     utteranceId: String?
                 ) {
-                    isSpeaking = false
+
+                    mainHandler.post {
+                        isSpeaking = false
+                    }
                 }
 
                 @Deprecated("Deprecated in Java")
                 override fun onError(
                     utteranceId: String?
                 ) {
-                    isSpeaking = false
+
+                    mainHandler.post {
+                        isSpeaking = false
+                    }
                 }
             }
         )
@@ -200,47 +369,187 @@ fun SmartAiChatScreen(
 
         onDispose {
 
-            engine.stop()
-            engine.shutdown()
+            mainHandler.post {
+
+                try {
+                    engine.stop()
+                } catch (_: Exception) {
+                }
+
+                try {
+                    engine.shutdown()
+                } catch (_: Exception) {
+                }
+
+                if (ttsEngine === engine) {
+                    ttsEngine = null
+                }
+
+                ttsReady = false
+                isSpeaking = false
+                pendingSpeech = ""
+            }
         }
     }
 
-
     // ========================================================
-    // PHASE 9 — SPEAK / STOP HELPERS
+    // SPEAK
     // ========================================================
 
     fun speak(text: String) {
 
+        val cleanText =
+            text
+                .trim()
+                .replace(Regex("\\*\\*"), "")
+                .replace(Regex("(?m)^#+\\s*"), "")
+                .replace(Regex("`"), "")
+
         if (
-            !voiceOutputEnabled ||
-            !ttsReady
+            cleanText.isBlank() ||
+            !voiceOutputEnabled
         ) {
             return
         }
 
         val engine =
             ttsEngine
-                ?: return
 
-        engine.language =
-            Locale.getDefault()
+        if (
+            engine == null ||
+            !ttsReady
+        ) {
 
-        engine.speak(
-            text,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            "prism_smart_ai_reply"
-        )
+            pendingSpeech = cleanText
+            return
+        }
+
+        mainHandler.post {
+
+            if (!voiceOutputEnabled) {
+                return@post
+            }
+
+            try {
+
+                var languageResult =
+                    engine.setLanguage(
+                        Locale("en", "IN")
+                    )
+
+                if (
+                    languageResult ==
+                    TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult ==
+                    TextToSpeech.LANG_NOT_SUPPORTED
+                ) {
+
+                    languageResult =
+                        engine.setLanguage(
+                            Locale.US
+                        )
+                }
+
+                if (
+                    languageResult ==
+                    TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult ==
+                    TextToSpeech.LANG_NOT_SUPPORTED
+                ) {
+
+                    languageResult =
+                        engine.setLanguage(
+                            Locale.getDefault()
+                        )
+                }
+
+                if (
+                    languageResult ==
+                    TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult ==
+                    TextToSpeech.LANG_NOT_SUPPORTED
+                ) {
+
+                    pendingSpeech = cleanText
+                    isSpeaking = false
+                    voiceError =
+                        "Text-to-speech language isn't available on this device."
+                    return@post
+                }
+
+                pendingSpeech = ""
+
+                val result =
+                    engine.speak(
+                        cleanText,
+                        TextToSpeech.QUEUE_FLUSH,
+                        null,
+                        "prism_smart_ai_reply_${System.currentTimeMillis()}"
+                    )
+
+                if (
+                    result ==
+                    TextToSpeech.ERROR
+                ) {
+
+                    pendingSpeech = cleanText
+                    isSpeaking = false
+                    voiceError =
+                        "Text-to-speech couldn't start on this device."
+                }
+            } catch (_: Exception) {
+
+                pendingSpeech = cleanText
+                isSpeaking = false
+                voiceError =
+                    "Text-to-speech couldn't start on this device."
+            }
+        }
     }
 
+    // ========================================================
+    // STOP SPEAKING
+    // ========================================================
 
     fun stopSpeaking() {
 
-        ttsEngine?.stop()
+        pendingSpeech = ""
         isSpeaking = false
+
+        mainHandler.post {
+
+            try {
+                ttsEngine?.stop()
+            } catch (_: Exception) {
+            }
+        }
     }
 
+    // ========================================================
+    // TOGGLE SPEAKER
+    // ========================================================
+
+    fun toggleSpeaker() {
+
+        if (voiceOutputEnabled) {
+
+            // Speaker currently ON -> turn OFF.
+            voiceOutputEnabled = false
+            stopSpeaking()
+
+        } else {
+
+            // Speaker currently OFF -> turn ON.
+            voiceOutputEnabled = true
+
+            val reply =
+                latestAiReply.trim()
+
+            if (reply.isNotBlank()) {
+                speak(reply)
+            }
+        }
+    }
 
     // ========================================================
     // SPEECH RESULT LAUNCHER
@@ -248,12 +557,16 @@ fun SmartAiChatScreen(
 
     val speechLauncher =
         rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.StartActivityForResult()
+            contract =
+                ActivityResultContracts.StartActivityForResult()
         ) { result ->
 
             isListening = false
 
-            if (result.resultCode == Activity.RESULT_OK) {
+            if (
+                result.resultCode ==
+                Activity.RESULT_OK
+            ) {
 
                 val spokenText =
                     result.data
@@ -263,7 +576,9 @@ fun SmartAiChatScreen(
                         ?.firstOrNull()
                         ?.trim()
 
-                if (!spokenText.isNullOrBlank()) {
+                if (
+                    !spokenText.isNullOrBlank()
+                ) {
 
                     inputText = spokenText
                     voiceError = ""
@@ -276,11 +591,9 @@ fun SmartAiChatScreen(
 
             } else {
 
-                // User cancelled the speech dialog.
                 voiceError = ""
             }
         }
-
 
     // ========================================================
     // MICROPHONE PERMISSION
@@ -288,7 +601,8 @@ fun SmartAiChatScreen(
 
     val micPermissionLauncher =
         rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestPermission()
+            contract =
+                ActivityResultContracts.RequestPermission()
         ) { granted ->
 
             if (granted) {
@@ -326,7 +640,9 @@ fun SmartAiChatScreen(
 
                     speechLauncher.launch(intent)
 
-                } catch (_: ActivityNotFoundException) {
+                } catch (
+                    _: ActivityNotFoundException
+                ) {
 
                     isListening = false
 
@@ -343,7 +659,6 @@ fun SmartAiChatScreen(
             }
         }
 
-
     // ========================================================
     // START VOICE INPUT
     // ========================================================
@@ -352,7 +667,9 @@ fun SmartAiChatScreen(
 
         if (
             isSending ||
-            contextLoading
+            contextLoading ||
+            !apiKeyChecked ||
+            storedKey == null
         ) {
             return
         }
@@ -361,7 +678,8 @@ fun SmartAiChatScreen(
             ContextCompat.checkSelfPermission(
                 localContext,
                 Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
+            ) ==
+                    PackageManager.PERMISSION_GRANTED
 
         if (!permissionGranted) {
 
@@ -405,7 +723,9 @@ fun SmartAiChatScreen(
 
             speechLauncher.launch(intent)
 
-        } catch (_: ActivityNotFoundException) {
+        } catch (
+            _: ActivityNotFoundException
+        ) {
 
             isListening = false
 
@@ -414,18 +734,14 @@ fun SmartAiChatScreen(
         }
     }
 
-
     // ========================================================
     // STOP VOICE INPUT
     // ========================================================
 
     fun stopVoiceInput() {
 
-        // Path A is controlled by the system speech screen.
-        // There is no SpeechRecognizer session to manually stop.
         isListening = false
     }
-
 
     // ========================================================
     // LOAD PRISM CONTEXT
@@ -433,7 +749,15 @@ fun SmartAiChatScreen(
 
     fun loadContext() {
 
-        val currentUid = uid ?: return
+        val currentUid =
+            uid ?: return
+
+        if (
+            !apiKeyChecked ||
+            storedKey == null
+        ) {
+            return
+        }
 
         contextLoading = true
         contextError = ""
@@ -450,23 +774,26 @@ fun SmartAiChatScreen(
 
             } catch (e: Exception) {
 
-                // Phase 11 — friendly, classified error messages
                 contextError =
                     when {
 
                         e is java.net.UnknownHostException ||
                                 e is java.io.IOException ->
+
                             "No internet connection — check your connection and try again."
 
                         e is com.google.firebase.firestore.FirebaseFirestoreException &&
                                 e.code ==
                                 com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED ->
+
                             "Smart AI couldn't access your PRISM data — try signing out and back in."
 
                         e is com.google.firebase.firestore.FirebaseFirestoreException ->
+
                             "Unable to load your PRISM data right now — try again in a moment."
 
                         else ->
+
                             e.message
                                 ?: "Unable to load your PRISM data right now."
                     }
@@ -478,11 +805,92 @@ fun SmartAiChatScreen(
         }
     }
 
+    // ========================================================
+    // LOAD CONTEXT AFTER API KEY EXISTS
+    // ========================================================
 
-    LaunchedEffect(uid) {
-        loadContext()
+    LaunchedEffect(
+        uid,
+        apiKeyChecked,
+        storedKey
+    ) {
+
+        if (
+            apiKeyChecked &&
+            storedKey != null
+        ) {
+
+            loadContext()
+        }
     }
 
+    // ========================================================
+    // API KEY MANAGEMENT SCREEN
+    // ========================================================
+
+    if (showApiKeySetup) {
+
+        SmartAiApiKeySetupScreen(
+            onBack = {
+                showApiKeySetup = false
+            }
+        )
+
+        return
+    }
+
+    // ========================================================
+    // MANDATORY API KEY GATE
+    // ========================================================
+
+    if (
+        apiKeyChecked &&
+        storedKey == null
+    ) {
+
+        SmartAiApiKeySetupScreen(
+            onBack = onBack
+        )
+
+        return
+    }
+
+    // ========================================================
+    // WAIT WHILE CHECKING KEY
+    // ========================================================
+
+    if (!apiKeyChecked) {
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    MaterialTheme.colorScheme.background
+                )
+                .statusBarsPadding(),
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.Center
+        ) {
+
+            CircularProgressIndicator()
+
+            Spacer(
+                modifier = Modifier.height(14.dp)
+            )
+
+            Text(
+                text =
+                    "Checking Smart AI configuration...",
+                color =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+        }
+
+        return
+    }
 
     // ========================================================
     // SEND MESSAGE
@@ -493,8 +901,14 @@ fun SmartAiChatScreen(
         displayText: String = text
     ) {
 
-        val trimmed = text.trim()
-        val currentContext = context
+        val trimmed =
+            text.trim()
+
+        val currentContext =
+            context
+
+        val currentKey =
+            storedKey
 
         if (
             trimmed.isBlank() ||
@@ -507,12 +921,20 @@ fun SmartAiChatScreen(
             stopVoiceInput()
         }
 
+        if (
+            !apiKeyChecked ||
+            currentKey == null
+        ) {
+            return
+        }
+
         if (currentContext == null) {
 
             messages.add(
                 DisplayMessage(
                     role = "model",
-                    text = "I couldn't load your PRISM data yet — try again in a moment.",
+                    text =
+                        "I couldn't load your PRISM data yet — try again in a moment.",
                     isError = true
                 )
             )
@@ -536,11 +958,12 @@ fun SmartAiChatScreen(
         messages.add(
             DisplayMessage(
                 role = "user",
-                text = displayText
-                    .trim()
-                    .ifBlank {
-                        trimmed
-                    },
+                text =
+                    displayText
+                        .trim()
+                        .ifBlank {
+                            trimmed
+                        },
                 promptText = trimmed
             )
         )
@@ -552,11 +975,17 @@ fun SmartAiChatScreen(
         coroutineScope.launch {
 
             val result =
-                GeminiChatService.sendMessage(
-                    history = historyBeforeThisMessage,
-                    newUserMessage = trimmed,
-                    prismContext = currentContext,
-                    apiKey = BuildConfig.GEMINI_API_KEY
+                AiChatService.sendMessage(
+                    provider =
+                        currentKey.provider,
+                    apiKey =
+                        currentKey.apiKey,
+                    history =
+                        historyBeforeThisMessage,
+                    newUserMessage =
+                        trimmed,
+                    prismContext =
+                        currentContext
                 )
 
             result
@@ -569,11 +998,14 @@ fun SmartAiChatScreen(
                         )
                     )
 
-                    // =================================================
-                    // PHASE 9 — SPEAK REAL AI REPLY
-                    // =================================================
+                    // Store latest response for speaker replay.
+                    latestAiReply = reply
 
-                    speak(reply)
+                    // Automatically speak when speaker is ON.
+                    if (voiceOutputEnabled) {
+
+                        speak(reply)
+                    }
                 }
                 .onFailure { error ->
 
@@ -598,7 +1030,6 @@ fun SmartAiChatScreen(
         }
     }
 
-
     // ========================================================
     // MAIN SCREEN
     // ========================================================
@@ -609,6 +1040,7 @@ fun SmartAiChatScreen(
             .background(
                 MaterialTheme.colorScheme.background
             )
+            .statusBarsPadding()
     ) {
 
         // ====================================================
@@ -619,10 +1051,11 @@ fun SmartAiChatScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
-                    horizontal = 20.dp,
-                    vertical = 18.dp
+                    horizontal = 16.dp,
+                    vertical = 10.dp
                 ),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             // =================================================
@@ -631,27 +1064,30 @@ fun SmartAiChatScreen(
 
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(48.dp)
                     .clip(
-                        RoundedCornerShape(13.dp)
+                        RoundedCornerShape(14.dp)
                     )
                     .background(
                         MaterialTheme.colorScheme.surface
                     )
                     .clickable(
-                        onClickLabel = "Go back"
+                        onClickLabel =
+                            "Go back"
                     ) {
+
                         stopSpeaking()
                         onBack()
                     },
-                contentAlignment = Alignment.Center
+                contentAlignment =
+                    Alignment.Center
             ) {
 
                 Text(
                     text = "‹",
                     color =
                         MaterialTheme.colorScheme.onSurface,
-                    fontSize = 32.sp,
+                    fontSize = 30.sp,
                     fontWeight = FontWeight.Light
                 )
             }
@@ -668,8 +1104,9 @@ fun SmartAiChatScreen(
                     text = "SMART AI",
                     color =
                         MaterialTheme.colorScheme.onSurface,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.4.sp
                 )
 
                 Text(
@@ -682,138 +1119,207 @@ fun SmartAiChatScreen(
                     color = Color(0xFFB76CFF),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp
+                    letterSpacing = 1.1.sp
                 )
             }
 
-
             // =================================================
-            // REPORT BUTTON
+            // HEADER BUTTONS
             // =================================================
 
-            Text(
-                text = "REPORT",
-                color = Color(0xFF00D9FF),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
+            Row(
                 modifier = Modifier
-                    .clickable(
-                        enabled =
-                            !isSending &&
-                                    !contextLoading
-                    ) {
+                    .horizontalScroll(
+                        rememberScrollState()
+                    ),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
 
-                        sendMessage(
-                            text =
-                                SmartAiPrompts.DAILY_REPORT_PROMPT,
-                            displayText =
-                                SmartAiPrompts.DAILY_REPORT_DISPLAY_TEXT
-                        )
-                    }
-                    .padding(8.dp)
-            )
-
-
-            // =================================================
-            // PHASE 9 — STOP SPEAKING
-            // =================================================
-
-            if (isSpeaking) {
-
-                Spacer(
-                    modifier = Modifier.width(4.dp)
-                )
-
-                Text(
-                    text = "STOP",
-                    color = Color(0xFFFF7B72),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    modifier = Modifier
-                        .clickable {
-                            stopSpeaking()
-                        }
-                        .padding(8.dp)
-                )
-            }
-
-
-            // =================================================
-            // PHASE 9 — SPEAKER TOGGLE
-            // =================================================
-
-            Spacer(
-                modifier = Modifier.width(4.dp)
-            )
-
-            Text(
-                text =
-                    if (voiceOutputEnabled) {
-                        "🔊"
-                    } else {
-                        "🔇"
-                    },
-                fontSize = 14.sp,
-                modifier = Modifier
-                    .clickable(
-                        onClickLabel = "Toggle spoken responses"
-                    ) {
-
-                        voiceOutputEnabled =
-                            !voiceOutputEnabled
-
-                        if (!voiceOutputEnabled) {
-                            stopSpeaking()
-                        }
-                    }
-                    .padding(8.dp)
-            )
-
-
-            // =================================================
-            // CLEAR BUTTON
-            // =================================================
-
-            if (messages.isNotEmpty()) {
-
-                Spacer(
-                    modifier = Modifier.width(4.dp)
-                )
+                // =============================================
+                // API BUTTON
+                // =============================================
 
                 Box(
                     modifier = Modifier
+                        .height(48.dp)
+                        .width(54.dp)
                         .clip(
-                            RoundedCornerShape(8.dp)
+                            RoundedCornerShape(10.dp)
                         )
                         .clickable(
-                            enabled = !isSending
+                            enabled = !isSending,
+                            onClickLabel =
+                                "Manage AI API key"
                         ) {
 
-                            messages.clear()
-                            inputText = ""
-                            voiceError = ""
-
-                        }
-                        .padding(
-                            horizontal = 8.dp,
-                            vertical = 8.dp
-                        )
+                            stopSpeaking()
+                            showApiKeySetup = true
+                        },
+                    contentAlignment =
+                        Alignment.Center
                 ) {
 
                     Text(
-                        text = "CLEAR",
-                        color =
-                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "API",
+                        color = Color(0xFFB76CFF),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
                 }
+
+                // =============================================
+                // REPORT
+                // =============================================
+
+                Box(
+                    modifier = Modifier
+                        .height(48.dp)
+                        .width(72.dp)
+                        .clip(
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable(
+                            enabled =
+                                !isSending &&
+                                        !contextLoading,
+                            onClickLabel =
+                                "Generate daily report"
+                        ) {
+
+                            sendMessage(
+                                text =
+                                    SmartAiPrompts
+                                        .DAILY_REPORT_PROMPT,
+                                displayText =
+                                    SmartAiPrompts
+                                        .DAILY_REPORT_DISPLAY_TEXT
+                            )
+                        },
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Text(
+                        text = "REPORT",
+                        color = Color(0xFF00D9FF),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                // =============================================
+                // STOP
+                // =============================================
+
+                if (isSpeaking) {
+
+                    Box(
+                        modifier = Modifier
+                            .height(48.dp)
+                            .width(64.dp)
+                            .clip(
+                                RoundedCornerShape(10.dp)
+                            )
+                            .clickable(
+                                onClickLabel =
+                                    "Stop speaking"
+                            ) {
+
+                                stopSpeaking()
+                            },
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Text(
+                            text = "STOP",
+                            color = Color(0xFFFF7B72),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+
+                // =============================================
+                // SPEAKER
+                // =============================================
+
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable(
+                            onClickLabel =
+                                if (voiceOutputEnabled) {
+                                    "Turn speaker off"
+                                } else {
+                                    "Turn speaker on"
+                                }
+                        ) {
+
+                            toggleSpeaker()
+                        },
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Text(
+                        text =
+                            if (voiceOutputEnabled) {
+                                "🔊"
+                            } else {
+                                "🔇"
+                            },
+                        fontSize = 16.sp
+                    )
+                }
+
+                // =============================================
+                // CLEAR
+                // =============================================
+
+                if (messages.isNotEmpty()) {
+
+                    Box(
+                        modifier = Modifier
+                            .height(48.dp)
+                            .width(68.dp)
+                            .clip(
+                                RoundedCornerShape(10.dp)
+                            )
+                            .clickable(
+                                enabled = !isSending,
+                                onClickLabel =
+                                    "Clear chat"
+                            ) {
+
+                                messages.clear()
+                                inputText = ""
+                                voiceError = ""
+                            },
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Text(
+                            text = "CLEAR",
+                            color =
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
             }
         }
-
 
         // ====================================================
         // CONTEXT ERROR
@@ -833,6 +1339,10 @@ fun SmartAiChatScreen(
                     CardDefaults.cardColors(
                         containerColor =
                             Color(0xFF241416)
+                    ),
+                elevation =
+                    CardDefaults.cardElevation(
+                        defaultElevation = 0.dp
                     )
             ) {
 
@@ -843,22 +1353,38 @@ fun SmartAiChatScreen(
                     Text(
                         text = contextError,
                         color = Color(0xFFFF7B72),
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
                     )
 
                     Spacer(
                         modifier = Modifier.height(8.dp)
                     )
 
-                    Text(
-                        text = "TAP TO RETRY",
-                        color = Color(0xFFFF7B72),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable {
-                            loadContext()
-                        }
-                    )
+                    Box(
+                        modifier = Modifier
+                            .height(40.dp)
+                            .clip(
+                                RoundedCornerShape(8.dp)
+                            )
+                            .clickable {
+                                loadContext()
+                            }
+                            .padding(
+                                horizontal = 6.dp
+                            ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Text(
+                            text = "TAP TO RETRY",
+                            color = Color(0xFFFF7B72),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.7.sp
+                        )
+                    }
                 }
             }
 
@@ -866,7 +1392,6 @@ fun SmartAiChatScreen(
                 modifier = Modifier.height(10.dp)
             )
         }
-
 
         // ====================================================
         // MESSAGE LIST
@@ -884,10 +1409,6 @@ fun SmartAiChatScreen(
                 Arrangement.spacedBy(10.dp)
         ) {
 
-            // =================================================
-            // SUGGESTED PROMPTS
-            // =================================================
-
             if (
                 messages.isEmpty() &&
                 !contextLoading
@@ -897,7 +1418,7 @@ fun SmartAiChatScreen(
 
                     Column(
                         modifier = Modifier.padding(
-                            top = 20.dp
+                            top = 16.dp
                         )
                     ) {
 
@@ -905,13 +1426,14 @@ fun SmartAiChatScreen(
                             text =
                                 "Ask about your deadlines, DSA progress, projects, or placement readiness.",
                             color =
-                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant,
                             fontSize = 12.sp,
                             lineHeight = 18.sp
                         )
 
                         Spacer(
-                            modifier = Modifier.height(14.dp)
+                            modifier = Modifier.height(12.dp)
                         )
 
                         SUGGESTED_PROMPTS.forEach { prompt ->
@@ -922,7 +1444,14 @@ fun SmartAiChatScreen(
                                     .padding(
                                         bottom = 8.dp
                                     )
-                                    .clickable {
+                                    .clickable(
+                                        enabled =
+                                            !isSending &&
+                                                    !contextLoading,
+                                        onClickLabel =
+                                            "Use suggested prompt"
+                                    ) {
+
                                         sendMessage(prompt)
                                     },
                                 shape =
@@ -930,24 +1459,38 @@ fun SmartAiChatScreen(
                                 colors =
                                     CardDefaults.cardColors(
                                         containerColor =
-                                            MaterialTheme.colorScheme.surface
+                                            MaterialTheme.colorScheme
+                                                .surface
+                                    ),
+                                elevation =
+                                    CardDefaults.cardElevation(
+                                        defaultElevation = 1.dp
                                     )
                             ) {
 
-                                Text(
-                                    text = prompt,
-                                    modifier =
-                                        Modifier.padding(14.dp),
-                                    color =
-                                        MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 12.sp
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 14.dp,
+                                            vertical = 15.dp
+                                        )
+                                ) {
+
+                                    Text(
+                                        text = prompt,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onSurface,
+                                        fontSize = 12.sp,
+                                        lineHeight = 17.sp
+                                    )
+                                }
                             }
                         }
 
-
                         Spacer(
-                            modifier = Modifier.height(6.dp)
+                            modifier = Modifier.height(4.dp)
                         )
 
                         Text(
@@ -961,7 +1504,6 @@ fun SmartAiChatScreen(
                         Spacer(
                             modifier = Modifier.height(8.dp)
                         )
-
 
                         Row(
                             modifier = Modifier
@@ -983,12 +1525,15 @@ fun SmartAiChatScreen(
                                                 RoundedCornerShape(12.dp)
                                             )
                                             .background(
-                                                MaterialTheme.colorScheme.surface
+                                                MaterialTheme.colorScheme
+                                                    .surface
                                             )
                                             .clickable(
                                                 enabled =
                                                     !isSending &&
-                                                            !contextLoading
+                                                            !contextLoading,
+                                                onClickLabel =
+                                                    "Plan my day for ${option.first}"
                                             ) {
 
                                                 sendMessage(
@@ -1002,15 +1547,16 @@ fun SmartAiChatScreen(
                                                 )
                                             }
                                             .padding(
-                                                horizontal = 14.dp,
-                                                vertical = 10.dp
+                                                horizontal = 18.dp,
+                                                vertical = 14.dp
                                             )
                                     ) {
 
                                         Text(
                                             text = option.first,
                                             color =
-                                                MaterialTheme.colorScheme.onSurface,
+                                                MaterialTheme.colorScheme
+                                                    .onSurface,
                                             fontSize = 11.sp,
                                             fontWeight =
                                                 FontWeight.Medium
@@ -1022,7 +1568,6 @@ fun SmartAiChatScreen(
                 }
             }
 
-
             // =================================================
             // CHAT MESSAGES
             // =================================================
@@ -1031,7 +1576,6 @@ fun SmartAiChatScreen(
 
                 ChatBubble(message)
             }
-
 
             // =================================================
             // THINKING INDICATOR
@@ -1042,6 +1586,10 @@ fun SmartAiChatScreen(
                 item {
 
                     Row(
+                        modifier =
+                            Modifier.padding(
+                                vertical = 2.dp
+                            ),
                         verticalAlignment =
                             Alignment.CenterVertically
                     ) {
@@ -1061,14 +1609,14 @@ fun SmartAiChatScreen(
                             text =
                                 "Smart AI is thinking...",
                             color =
-                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant,
                             fontSize = 11.sp
                         )
                     }
                 }
             }
         }
-
 
         // ====================================================
         // INPUT ROW
@@ -1077,7 +1625,10 @@ fun SmartAiChatScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = 12.dp
+                ),
             verticalAlignment =
                 Alignment.CenterVertically
         ) {
@@ -1091,7 +1642,11 @@ fun SmartAiChatScreen(
                 },
                 modifier = Modifier.weight(1f),
                 placeholder = {
-                    Text("Ask Smart AI...")
+
+                    Text(
+                        text = "Ask Smart AI...",
+                        fontSize = 13.sp
+                    )
                 },
                 enabled =
                     !isSending &&
@@ -1104,9 +1659,8 @@ fun SmartAiChatScreen(
                 modifier = Modifier.width(8.dp)
             )
 
-
             // =================================================
-            // MICROPHONE BUTTON
+            // MICROPHONE
             // =================================================
 
             Box(
@@ -1126,7 +1680,8 @@ fun SmartAiChatScreen(
                         enabled =
                             !isSending &&
                                     !contextLoading,
-                        onClickLabel = "Voice input"
+                        onClickLabel =
+                            "Voice input"
                     ) {
 
                         if (isListening) {
@@ -1163,9 +1718,8 @@ fun SmartAiChatScreen(
                 modifier = Modifier.width(8.dp)
             )
 
-
             // =================================================
-            // SEND BUTTON
+            // SEND
             // =================================================
 
             Box(
@@ -1191,7 +1745,8 @@ fun SmartAiChatScreen(
                         enabled =
                             inputText.isNotBlank() &&
                                     !isSending,
-                        onClickLabel = "Send message"
+                        onClickLabel =
+                            "Send message"
                     ) {
 
                         sendMessage(inputText)
@@ -1208,43 +1763,56 @@ fun SmartAiChatScreen(
             }
         }
 
-
         // ====================================================
         // VOICE STATUS / ERROR
         // ====================================================
 
         if (isListening) {
 
-            Text(
-                text = "Listening... speak now",
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        horizontal = 20.dp,
-                        vertical = 4.dp
-                    ),
-                color = Color(0xFFB76CFF),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium
-            )
+                    .height(32.dp),
+                contentAlignment =
+                    Alignment.CenterStart
+            ) {
+
+                Text(
+                    text =
+                        "Listening... speak now",
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 20.dp
+                        ),
+                    color = Color(0xFFB76CFF),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
 
         } else if (voiceError.isNotBlank()) {
 
-            Text(
-                text = voiceError,
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        horizontal = 20.dp,
-                        vertical = 4.dp
-                    ),
-                color = Color(0xFFFF7B72),
-                fontSize = 10.sp
-            )
+                    .height(32.dp),
+                contentAlignment =
+                    Alignment.CenterStart
+            ) {
+
+                Text(
+                    text = voiceError,
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 20.dp
+                        ),
+                    color = Color(0xFFFF7B72),
+                    fontSize = 10.sp
+                )
+            }
         }
     }
 }
-
 
 // ============================================================
 // CHAT BUBBLE
@@ -1272,7 +1840,7 @@ private fun ChatBubble(
         Card(
             modifier =
                 Modifier.widthIn(
-                    max = 280.dp
+                    max = 300.dp
                 ),
             shape =
                 RoundedCornerShape(16.dp),
@@ -1290,13 +1858,20 @@ private fun ChatBubble(
                             else ->
                                 MaterialTheme.colorScheme.surface
                         }
+                ),
+            elevation =
+                CardDefaults.cardElevation(
+                    defaultElevation = 1.dp
                 )
         ) {
 
             Text(
                 text = message.text,
                 modifier =
-                    Modifier.padding(12.dp),
+                    Modifier.padding(
+                        horizontal = 13.dp,
+                        vertical = 12.dp
+                    ),
                 color =
                     if (isUser) {
                         Color.White
