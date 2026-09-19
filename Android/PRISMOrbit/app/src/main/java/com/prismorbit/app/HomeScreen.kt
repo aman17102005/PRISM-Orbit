@@ -1,4 +1,5 @@
 
+
 package com.prismorbit.app
 
 import android.graphics.Bitmap
@@ -3743,6 +3744,10 @@ private fun AddProblemScreen(
 
     val difficulties = listOf("Easy", "Medium", "Hard")
 
+    val suggestions = remember(problemName) {
+        KnownDsaProblems.search(problemName)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -3764,7 +3769,9 @@ private fun AddProblemScreen(
                     fontSize = 38.sp,
                     modifier = Modifier.clickable { onBack() }
                 )
+
                 Spacer(modifier = Modifier.size(10.dp))
+
                 Column {
                     Text(
                         text = "ADD PROBLEM",
@@ -3772,6 +3779,7 @@ private fun AddProblemScreen(
                         fontSize = 24.sp,
                         fontWeight = FontWeight.SemiBold
                     )
+
                     Text(
                         text = "UPDATE YOUR DSA JOURNEY",
                         color = Color(0xFF00D9FF),
@@ -3797,6 +3805,79 @@ private fun AddProblemScreen(
                 enabled = !isSaving
             )
 
+            // =================================================
+            // AUTOCOMPLETE SUGGESTIONS
+            // =================================================
+
+            if (problemName.isNotBlank() && suggestions.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    suggestions.forEach { suggestion ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                                .clickable(enabled = !isSaving) {
+                                    problemName = suggestion.name
+                                    selectedTopic = suggestion.topic
+                                    selectedDifficulty = suggestion.difficulty
+                                    error = ""
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 14.dp,
+                                        vertical = 11.dp
+                                    ),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = suggestion.name,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+
+                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                    Text(
+                                        text = "${suggestion.platform} • ${suggestion.topic}",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 9.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Text(
+                                    text = suggestion.difficulty,
+                                    color = when (suggestion.difficulty) {
+                                        "Easy" -> Color(0xFF65E572)
+                                        "Medium" -> Color(0xFFFFD23F)
+                                        else -> Color(0xFFFF7B72)
+                                    },
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(22.dp))
 
             Text(
@@ -3806,6 +3887,7 @@ private fun AddProblemScreen(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp
             )
+
             Spacer(modifier = Modifier.height(10.dp))
 
             difficulties.forEach { difficulty ->
@@ -3813,9 +3895,12 @@ private fun AddProblemScreen(
                     text = difficulty,
                     selected = selectedDifficulty == difficulty,
                     onClick = {
-                        if (!isSaving) selectedDifficulty = difficulty
+                        if (!isSaving) {
+                            selectedDifficulty = difficulty
+                        }
                     }
                 )
+
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
@@ -3828,6 +3913,7 @@ private fun AddProblemScreen(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp
             )
+
             Spacer(modifier = Modifier.height(10.dp))
 
             topics.forEach { topic ->
@@ -3835,14 +3921,18 @@ private fun AddProblemScreen(
                     text = topic,
                     selected = selectedTopic == topic,
                     onClick = {
-                        if (!isSaving) selectedTopic = topic
+                        if (!isSaving) {
+                            selectedTopic = topic
+                        }
                     }
                 )
+
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
             if (error.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
+
                 Text(
                     text = error,
                     color = Color(0xFFFF6B6B),
@@ -3860,9 +3950,13 @@ private fun AddProblemScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                Column(
+                    modifier = Modifier.padding(18.dp)
+                ) {
                     Text(
                         text = "PRISM WEIGHT",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -3870,14 +3964,18 @@ private fun AddProblemScreen(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.5.sp
                     )
+
                     Spacer(modifier = Modifier.height(7.dp))
+
                     Text(
                         text = "${"%.1f".format(previewScore)} points",
                         color = Color(0xFF00D9FF),
                         fontSize = 25.sp,
                         fontWeight = FontWeight.Bold
                     )
+
                     Spacer(modifier = Modifier.height(5.dp))
+
                     Text(
                         text = "Difficulty + topic importance",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -3909,14 +4007,19 @@ private fun AddProblemScreen(
                         )
                     ) { success, message ->
                         isSaving = false
+
                         if (!success) {
-                            error = message.ifBlank { "Unable to save problem." }
+                            error = message.ifBlank {
+                                "Unable to save problem."
+                            }
                         }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isSaving,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4DFF)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF8B4DFF)
+                ),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Text(
