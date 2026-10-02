@@ -56,11 +56,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import java.util.Calendar
+import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.storage.FirebaseStorage
 import kotlin.math.roundToInt
 
 
@@ -72,7 +74,8 @@ data class DSAProblem(
     val name: String,
     val topic: String,
     val difficulty: String,
-    val score: Float
+    val score: Float,
+    val solvedDate: String = ""
 )
 
 
@@ -148,7 +151,8 @@ private fun DSAProblem.toMap(): Map<String, Any> = mapOf(
     "name" to name,
     "topic" to topic,
     "difficulty" to difficulty,
-    "score" to score.toDouble()
+    "score" to score.toDouble(),
+    "solvedDate" to solvedDate
 )
 
 private fun dsaProblemDocumentId(problemName: String): String {
@@ -177,7 +181,8 @@ private fun documentToDsaProblem(
         name = name,
         topic = topic.ifBlank { "Other" },
         difficulty = difficulty.ifBlank { "Easy" },
-        score = score
+        score = score,
+        solvedDate = document.getString("solvedDate")?.trim().orEmpty()
     )
 }
 
@@ -722,6 +727,10 @@ private fun normalizeDsaDifficulty(raw: String): String {
     }
 }
 
+/**
+ * Today's date as YYYY-MM-DD, self-contained so this doesn't depend
+ * on any other function existing elsewhere in the file.
+ */
 private fun parseCsvRow(line: String): List<String> {
     val columns = mutableListOf<String>()
     val current = StringBuilder()
@@ -778,13 +787,46 @@ private fun parseDsaCsv(text: String): List<DSAProblem> {
         val difficulty = normalizeDsaDifficulty(columns.getOrNull(2).orEmpty())
         val score = calculateProblemScore(difficulty, topic)
 
-        DSAProblem(
-            name = name,
-            topic = topic,
-            difficulty = difficulty,
-            score = score
+        // The CSV doesn't contain the original solve date, so this marks
+        // "added to PRISM today" — not a guess at when it was first solved.
+        val todayCal = Calendar.getInstance()
+        val todayKey = "%04d-%02d-%02d".format(
+            todayCal.get(Calendar.YEAR),
+            todayCal.get(Calendar.MONTH) + 1,
+            todayCal.get(Calendar.DAY_OF_MONTH)
         )
+
+        DSAProblem(name = name, topic = topic, difficulty = difficulty, score = score, solvedDate = todayKey)
     }
+}
+
+
+private fun calculateDsaStreak(problems: List<DSAProblem>): Int {
+    val solvedDates = problems
+        .mapNotNull { it.solvedDate.takeIf { date -> date.isNotBlank() } }
+        .toSet()
+
+    if (solvedDates.isEmpty()) return 0
+
+    val calendar = Calendar.getInstance()
+    var streak = 0
+
+    while (true) {
+        val dateKey = "%04d-%02d-%02d".format(
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH) + 1,
+            calendar.get(Calendar.DAY_OF_MONTH)
+        )
+
+        if (dateKey in solvedDates) {
+            streak++
+            calendar.add(Calendar.DAY_OF_MONTH, -1)
+        } else {
+            break
+        }
+    }
+
+    return streak
 }
 
 @Composable
@@ -3178,21 +3220,18 @@ private fun AddAcademicEventScreen(
     }
 }
 
-private fun todayDateKey(): String {
-    val calendar = Calendar.getInstance()
-    return "%04d-%02d-%02d".format(
-        calendar.get(Calendar.YEAR),
-        calendar.get(Calendar.MONTH) + 1,
-        calendar.get(Calendar.DAY_OF_MONTH)
-    )
-}
 
 private fun eventStatus(event: AcademicEvent): String {
     if (event.status == "COMPLETED" || event.status == "CANCELLED") {
         return event.status
     }
 
-    val today = todayDateKey()
+    val todayCal = Calendar.getInstance()
+    val today = "%04d-%02d-%02d".format(
+        todayCal.get(Calendar.YEAR),
+        todayCal.get(Calendar.MONTH) + 1,
+        todayCal.get(Calendar.DAY_OF_MONTH)
+    )
 
     return when {
         event.date < today -> "EXPIRED"
@@ -3676,6 +3715,7 @@ private fun DSAScreen(
     val mediumCount = problems.count { it.difficulty == "Medium" }
     val hardCount = problems.count { it.difficulty == "Hard" }
     val weightedScore = problems.sumOf { it.score.toDouble() }.toFloat()
+    val streak = calculateDsaStreak(problems)
 
     Column(
         modifier = Modifier
@@ -3762,6 +3802,7 @@ private fun DSAScreen(
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SmallStatCard(Modifier.weight(1f), "SOLVED", problems.size.toString())
+            SmallStatCard(Modifier.weight(1f), "STREAK", if (streak > 0) "${streak}d" else "—")
             SmallStatCard(Modifier.weight(1f), "TARGET", "100")
             SmallStatCard(Modifier.weight(1f), "WEIGHTED", "${"%.0f".format(weightedScore)}")
         }
@@ -4233,12 +4274,20 @@ private fun AddProblemScreen(
                     error = ""
                     isSaving = true
 
+                    val todayCal = Calendar.getInstance()
+                    val todayKey = "%04d-%02d-%02d".format(
+                        todayCal.get(Calendar.YEAR),
+                        todayCal.get(Calendar.MONTH) + 1,
+                        todayCal.get(Calendar.DAY_OF_MONTH)
+                    )
+
                     onSave(
                         DSAProblem(
                             name = cleanName,
                             topic = selectedTopic,
                             difficulty = selectedDifficulty,
-                            score = previewScore
+                            score = previewScore,
+                            solvedDate = todayKey
                         )
                     ) { success, message ->
                         isSaving = false
@@ -4992,44 +5041,6 @@ private fun CGPAScreen(
 
 
 // =========================================================
-// PROFILE PHOTO — STORED AS TEXT (NO FIREBASE STORAGE NEEDED)
-// =========================================================
-
-private const val PROFILE_PHOTO_MAX_DIMENSION = 160
-
-private fun encodeProfilePhoto(bitmap: Bitmap): String {
-    val width = bitmap.width
-    val height = bitmap.height
-    val scale = PROFILE_PHOTO_MAX_DIMENSION.toFloat() / maxOf(width, height)
-
-    val resized = if (scale < 1f) {
-        Bitmap.createScaledBitmap(
-            bitmap,
-            (width * scale).toInt().coerceAtLeast(1),
-            (height * scale).toInt().coerceAtLeast(1),
-            true
-        )
-    } else {
-        bitmap
-    }
-
-    val outputStream = java.io.ByteArrayOutputStream()
-    resized.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
-    val bytes = outputStream.toByteArray()
-
-    return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-}
-
-private fun decodeProfilePhoto(base64: String): Bitmap? {
-    return try {
-        val bytes = android.util.Base64.decode(base64, android.util.Base64.NO_WRAP)
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-    } catch (e: Exception) {
-        null
-    }
-}
-
-// =========================================================
 // PROFILE SCREEN
 // =========================================================
 
@@ -5039,6 +5050,7 @@ private fun ProfileScreen(
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
     val firestore = remember { FirebaseFirestore.getInstance() }
+    val storage = remember { FirebaseStorage.getInstance() }
     val user = auth.currentUser
     val context = LocalContext.current
 
@@ -5056,7 +5068,7 @@ private fun ProfileScreen(
     var cgpa by remember { mutableStateOf("") }
     var skills by remember { mutableStateOf("") }
     var about by remember { mutableStateOf("") }
-    var photoBase64 by remember { mutableStateOf("") }
+    var photoUrl by remember { mutableStateOf("") }
     var localPhoto by remember { mutableStateOf<Bitmap?>(null) }
 
     val photoPicker = rememberLauncherForActivityResult(
@@ -5064,37 +5076,38 @@ private fun ProfileScreen(
     ) { uri: Uri? ->
         if (uri == null || user == null) return@rememberLauncherForActivityResult
 
-        message = "Saving photo..."
-        messageIsError = false
-
-        val pickedBitmap = try {
-            context.contentResolver.openInputStream(uri)?.use {
+        try {
+            localPhoto = context.contentResolver.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it)
             }
         } catch (_: Exception) {
-            null
+            localPhoto = null
         }
 
-        if (pickedBitmap == null) {
-            message = "Unable to read that photo."
-            messageIsError = true
-            return@rememberLauncherForActivityResult
-        }
+        message = "Uploading photo..."
+        messageIsError = false
 
-        // No Cloud Storage involved — the photo is shrunk, converted to
-        // text, and saved as a normal Firestore field.
-        val encoded = encodeProfilePhoto(pickedBitmap)
-
-        firestore.collection("users").document(user.uid)
-            .set(mapOf("photoBase64" to encoded), SetOptions.merge())
-            .addOnSuccessListener {
-                photoBase64 = encoded
-                localPhoto = decodeProfilePhoto(encoded)
-                message = "Profile photo saved successfully."
-                messageIsError = false
+        val photoRef = storage.reference.child("users/${user.uid}/profile_photo.jpg")
+        photoRef.putFile(uri)
+            .continueWithTask { task ->
+                if (!task.isSuccessful) throw task.exception ?: Exception("Photo upload failed.")
+                photoRef.downloadUrl
+            }
+            .addOnSuccessListener { downloadUri ->
+                photoUrl = downloadUri.toString()
+                firestore.collection("users").document(user.uid)
+                    .set(mapOf("photoUrl" to photoUrl), SetOptions.merge())
+                    .addOnSuccessListener {
+                        message = "Profile photo uploaded successfully."
+                        messageIsError = false
+                    }
+                    .addOnFailureListener { exception ->
+                        message = exception.message ?: "Photo saved, but profile update failed."
+                        messageIsError = true
+                    }
             }
             .addOnFailureListener { exception ->
-                message = exception.message ?: "Unable to save profile photo."
+                message = exception.message ?: "Unable to upload profile photo."
                 messageIsError = true
             }
     }
@@ -5123,7 +5136,7 @@ private fun ProfileScreen(
                 cgpa = document.getString("cgpa") ?: ""
                 skills = document.getString("skills") ?: ""
                 about = document.getString("about") ?: ""
-                photoBase64 = document.getString("photoBase64") ?: ""
+                photoUrl = document.getString("photoUrl") ?: ""
                 isLoading = false
             }
             .addOnFailureListener { exception ->
@@ -5133,10 +5146,11 @@ private fun ProfileScreen(
             }
     }
 
-    LaunchedEffect(photoBase64) {
-        if (photoBase64.isBlank()) return@LaunchedEffect
+    LaunchedEffect(photoUrl) {
+        if (photoUrl.isBlank() || localPhoto != null) return@LaunchedEffect
         localPhoto = withContext(Dispatchers.IO) {
-            decodeProfilePhoto(photoBase64)
+            try { URL(photoUrl).openStream().use { BitmapFactory.decodeStream(it) } }
+            catch (_: Exception) { null }
         }
     }
 
@@ -5194,7 +5208,7 @@ private fun ProfileScreen(
                         Text("UPLOAD PHOTO", fontWeight = FontWeight.Bold, fontSize = 9.sp)
                     }
                 } else {
-                    Text(if (photoBase64.isNotBlank()) "PROFILE PHOTO SAVED" else "NO PROFILE PHOTO YET", color = Color(0xFF00D9FF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(if (photoUrl.isNotBlank()) "PROFILE PHOTO SAVED" else "NO PROFILE PHOTO YET", color = Color(0xFF00D9FF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 }
             }
         }
