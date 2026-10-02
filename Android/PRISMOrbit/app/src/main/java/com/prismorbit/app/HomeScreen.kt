@@ -56,13 +56,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import java.util.Calendar
-import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.storage.FirebaseStorage
 import kotlin.math.roundToInt
 
 
@@ -687,6 +685,108 @@ private fun displayInitials(fullName: String): String {
     }
 }
 
+// =========================================================
+// DSA CSV IMPORT HELPERS
+// =========================================================
+
+private val KNOWN_DSA_TOPICS = listOf(
+    "Arrays",
+    "Strings",
+    "Searching & Sorting",
+    "Linked List",
+    "Stack & Queue",
+    "Hashing",
+    "Recursion",
+    "Trees / BST",
+    "Heap",
+    "Greedy",
+    "Graphs",
+    "Backtracking",
+    "Tries",
+    "Dynamic Programming",
+    "Bit Manipulation"
+)
+
+private fun normalizeDsaTopic(raw: String): String {
+    val trimmed = raw.trim()
+    return KNOWN_DSA_TOPICS.firstOrNull { it.equals(trimmed, ignoreCase = true) } ?: "Other"
+}
+
+private fun normalizeDsaDifficulty(raw: String): String {
+    val trimmed = raw.trim().lowercase()
+    return when {
+        trimmed.startsWith("e") -> "Easy"
+        trimmed.startsWith("m") -> "Medium"
+        trimmed.startsWith("h") -> "Hard"
+        else -> "Easy"
+    }
+}
+
+private fun parseCsvRow(line: String): List<String> {
+    val columns = mutableListOf<String>()
+    val current = StringBuilder()
+    var inQuotes = false
+    var index = 0
+
+    while (index < line.length) {
+        val char = line[index]
+
+        when {
+            char == '"' -> {
+                if (inQuotes && index + 1 < line.length && line[index + 1] == '"') {
+                    current.append('\"')
+                    index++
+                } else {
+                    inQuotes = !inQuotes
+                }
+            }
+
+            char == ',' && !inQuotes -> {
+                columns.add(current.toString().trim())
+                current.setLength(0)
+            }
+
+            else -> current.append(char)
+        }
+
+        index++
+    }
+
+    columns.add(current.toString().trim())
+    return columns
+}
+
+/**
+ * Parses a CSV with a header row: Name,Topic,Difficulty.
+ * Quoted values and commas inside quoted problem names are supported.
+ */
+private fun parseDsaCsv(text: String): List<DSAProblem> {
+    val lines = text
+        .removePrefix("\uFEFF")
+        .lineSequence()
+        .filter { it.isNotBlank() }
+        .toList()
+
+    if (lines.size < 2) return emptyList()
+
+    return lines.drop(1).mapNotNull { line ->
+        val columns = parseCsvRow(line)
+        val name = columns.getOrNull(0)?.trim()?.trim('\"').orEmpty()
+        if (name.isBlank()) return@mapNotNull null
+
+        val topic = normalizeDsaTopic(columns.getOrNull(1).orEmpty())
+        val difficulty = normalizeDsaDifficulty(columns.getOrNull(2).orEmpty())
+        val score = calculateProblemScore(difficulty, topic)
+
+        DSAProblem(
+            name = name,
+            topic = topic,
+            difficulty = difficulty,
+            score = score
+        )
+    }
+}
+
 @Composable
 fun HomeScreen(onLogout: () -> Unit = {}) {
     val auth = FirebaseAuth.getInstance()
@@ -1201,6 +1301,42 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
                             dsaLoadError = error.message ?: "Unable to delete DSA problem."
                         }
                     )
+                }
+            },
+            onImportProblems = { parsedProblems, onResult ->
+                val uid = signedInUser?.uid
+
+                if (uid == null) {
+                    onResult(0, 0, parsedProblems.size)
+                } else {
+                    fun importNext(index: Int, imported: Int, skipped: Int, failed: Int) {
+                        if (index >= parsedProblems.size) {
+                            onResult(imported, skipped, failed)
+                            return
+                        }
+
+                        val problem = parsedProblems[index]
+
+                        saveDsaProblem(
+                            firestore = firestore,
+                            uid = uid,
+                            problem = problem,
+                            onSuccess = {
+                                dsaProblems.add(problem)
+                                dsaProblems.sortBy { it.name.lowercase() }
+                                importNext(index + 1, imported + 1, skipped, failed)
+                            },
+                            onError = { error ->
+                                if (error is DsaDuplicateProblemException) {
+                                    importNext(index + 1, imported, skipped + 1, failed)
+                                } else {
+                                    importNext(index + 1, imported, skipped, failed + 1)
+                                }
+                            }
+                        )
+                    }
+
+                    importNext(0, 0, 0, 0)
                 }
             }
         )
@@ -3488,9 +3624,52 @@ private fun DSAScreen(
     errorMessage: String,
     onBack: () -> Unit,
     onAddProblem: (DSAProblem, (Boolean, String) -> Unit) -> Unit,
-    onDeleteProblem: (DSAProblem) -> Unit
+    onDeleteProblem: (DSAProblem) -> Unit,
+    onImportProblems: (List<DSAProblem>, (Int, Int, Int) -> Unit) -> Unit
 ) {
     var showAddProblem by remember { mutableStateOf(false) }
+
+    val importContext = LocalContext.current
+    var isImporting by remember { mutableStateOf(false) }
+    var importResultMessage by remember { mutableStateOf("") }
+    var importErrorMessage by remember { mutableStateOf("") }
+
+    val importFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+
+        importResultMessage = ""
+        importErrorMessage = ""
+        isImporting = true
+
+        val text = try {
+            importContext.contentResolver.openInputStream(uri)
+                ?.bufferedReader()
+                ?.use { it.readText() }
+                .orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+
+        val parsed = parseDsaCsv(text)
+
+        if (parsed.isEmpty()) {
+            isImporting = false
+            importErrorMessage = "Couldn't find any problems in this file. It needs Name, Topic, Difficulty columns."
+        } else {
+            onImportProblems(parsed) { imported, skipped, failed ->
+                isImporting = false
+                importResultMessage = buildString {
+                    append("Imported $imported new problem")
+                    if (imported != 1) append("s")
+                    if (skipped > 0) append(", skipped $skipped already-added")
+                    if (failed > 0) append(", $failed couldn't be saved")
+                    append(".")
+                }
+            }
+        }
+    }
 
     val dsaScore = calculateDsaProgress(problems)
     val easyCount = problems.count { it.difficulty == "Easy" }
@@ -3680,6 +3859,57 @@ private fun DSAScreen(
             Text("+  ADD PROBLEM", fontWeight = FontWeight.Bold)
         }
 
+        Spacer(modifier = Modifier.height(10.dp))
+
+        OutlinedButton(
+            onClick = {
+                importResultMessage = ""
+                importErrorMessage = ""
+                importFileLauncher.launch("text/*")
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isImporting,
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(
+                if (isImporting) "IMPORTING..." else "IMPORT FROM FILE (CSV)",
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp
+            )
+        }
+
+        if (importResultMessage.isNotBlank()) {
+            Spacer(modifier = Modifier.height(9.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF14251A))
+            ) {
+                Text(
+                    importResultMessage,
+                    color = Color(0xFF65E572),
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(13.dp)
+                )
+            }
+        }
+
+        if (importErrorMessage.isNotBlank()) {
+            Spacer(modifier = Modifier.height(9.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF241416))
+            ) {
+                Text(
+                    importErrorMessage,
+                    color = Color(0xFFFF7B72),
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(13.dp)
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(18.dp))
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -3723,6 +3953,11 @@ private fun AddProblemScreen(
     var selectedDifficulty by remember { mutableStateOf("Easy") }
     var error by remember { mutableStateOf("") }
     var isSaving by remember { mutableStateOf(false) }
+
+    val localContext = LocalContext.current
+    LaunchedEffect(Unit) {
+        KnownDsaProblems.loadIfNeeded(localContext)
+    }
 
     val topics = listOf(
         "Arrays",
@@ -4757,6 +4992,44 @@ private fun CGPAScreen(
 
 
 // =========================================================
+// PROFILE PHOTO — STORED AS TEXT (NO FIREBASE STORAGE NEEDED)
+// =========================================================
+
+private const val PROFILE_PHOTO_MAX_DIMENSION = 160
+
+private fun encodeProfilePhoto(bitmap: Bitmap): String {
+    val width = bitmap.width
+    val height = bitmap.height
+    val scale = PROFILE_PHOTO_MAX_DIMENSION.toFloat() / maxOf(width, height)
+
+    val resized = if (scale < 1f) {
+        Bitmap.createScaledBitmap(
+            bitmap,
+            (width * scale).toInt().coerceAtLeast(1),
+            (height * scale).toInt().coerceAtLeast(1),
+            true
+        )
+    } else {
+        bitmap
+    }
+
+    val outputStream = java.io.ByteArrayOutputStream()
+    resized.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+    val bytes = outputStream.toByteArray()
+
+    return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+}
+
+private fun decodeProfilePhoto(base64: String): Bitmap? {
+    return try {
+        val bytes = android.util.Base64.decode(base64, android.util.Base64.NO_WRAP)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    } catch (e: Exception) {
+        null
+    }
+}
+
+// =========================================================
 // PROFILE SCREEN
 // =========================================================
 
@@ -4766,7 +5039,6 @@ private fun ProfileScreen(
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
     val firestore = remember { FirebaseFirestore.getInstance() }
-    val storage = remember { FirebaseStorage.getInstance() }
     val user = auth.currentUser
     val context = LocalContext.current
 
@@ -4784,7 +5056,7 @@ private fun ProfileScreen(
     var cgpa by remember { mutableStateOf("") }
     var skills by remember { mutableStateOf("") }
     var about by remember { mutableStateOf("") }
-    var photoUrl by remember { mutableStateOf("") }
+    var photoBase64 by remember { mutableStateOf("") }
     var localPhoto by remember { mutableStateOf<Bitmap?>(null) }
 
     val photoPicker = rememberLauncherForActivityResult(
@@ -4792,38 +5064,37 @@ private fun ProfileScreen(
     ) { uri: Uri? ->
         if (uri == null || user == null) return@rememberLauncherForActivityResult
 
-        try {
-            localPhoto = context.contentResolver.openInputStream(uri)?.use {
+        message = "Saving photo..."
+        messageIsError = false
+
+        val pickedBitmap = try {
+            context.contentResolver.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it)
             }
         } catch (_: Exception) {
-            localPhoto = null
+            null
         }
 
-        message = "Uploading photo..."
-        messageIsError = false
+        if (pickedBitmap == null) {
+            message = "Unable to read that photo."
+            messageIsError = true
+            return@rememberLauncherForActivityResult
+        }
 
-        val photoRef = storage.reference.child("users/${user.uid}/profile_photo.jpg")
-        photoRef.putFile(uri)
-            .continueWithTask { task ->
-                if (!task.isSuccessful) throw task.exception ?: Exception("Photo upload failed.")
-                photoRef.downloadUrl
-            }
-            .addOnSuccessListener { downloadUri ->
-                photoUrl = downloadUri.toString()
-                firestore.collection("users").document(user.uid)
-                    .set(mapOf("photoUrl" to photoUrl), SetOptions.merge())
-                    .addOnSuccessListener {
-                        message = "Profile photo uploaded successfully."
-                        messageIsError = false
-                    }
-                    .addOnFailureListener { exception ->
-                        message = exception.message ?: "Photo saved, but profile update failed."
-                        messageIsError = true
-                    }
+        // No Cloud Storage involved — the photo is shrunk, converted to
+        // text, and saved as a normal Firestore field.
+        val encoded = encodeProfilePhoto(pickedBitmap)
+
+        firestore.collection("users").document(user.uid)
+            .set(mapOf("photoBase64" to encoded), SetOptions.merge())
+            .addOnSuccessListener {
+                photoBase64 = encoded
+                localPhoto = decodeProfilePhoto(encoded)
+                message = "Profile photo saved successfully."
+                messageIsError = false
             }
             .addOnFailureListener { exception ->
-                message = exception.message ?: "Unable to upload profile photo."
+                message = exception.message ?: "Unable to save profile photo."
                 messageIsError = true
             }
     }
@@ -4852,7 +5123,7 @@ private fun ProfileScreen(
                 cgpa = document.getString("cgpa") ?: ""
                 skills = document.getString("skills") ?: ""
                 about = document.getString("about") ?: ""
-                photoUrl = document.getString("photoUrl") ?: ""
+                photoBase64 = document.getString("photoBase64") ?: ""
                 isLoading = false
             }
             .addOnFailureListener { exception ->
@@ -4862,11 +5133,10 @@ private fun ProfileScreen(
             }
     }
 
-    LaunchedEffect(photoUrl) {
-        if (photoUrl.isBlank() || localPhoto != null) return@LaunchedEffect
+    LaunchedEffect(photoBase64) {
+        if (photoBase64.isBlank()) return@LaunchedEffect
         localPhoto = withContext(Dispatchers.IO) {
-            try { URL(photoUrl).openStream().use { BitmapFactory.decodeStream(it) } }
-            catch (_: Exception) { null }
+            decodeProfilePhoto(photoBase64)
         }
     }
 
@@ -4924,7 +5194,7 @@ private fun ProfileScreen(
                         Text("UPLOAD PHOTO", fontWeight = FontWeight.Bold, fontSize = 9.sp)
                     }
                 } else {
-                    Text(if (photoUrl.isNotBlank()) "PROFILE PHOTO SAVED" else "NO PROFILE PHOTO YET", color = Color(0xFF00D9FF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(if (photoBase64.isNotBlank()) "PROFILE PHOTO SAVED" else "NO PROFILE PHOTO YET", color = Color(0xFF00D9FF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 }
             }
         }
