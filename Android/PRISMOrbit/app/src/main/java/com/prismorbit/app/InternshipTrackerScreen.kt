@@ -355,6 +355,7 @@ fun InternshipTrackerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val busyIds = remember { mutableStateListOf<String>() }
+    val backfilledIds = remember { mutableSetOf<String>() }
     var showKeySetup by remember { mutableStateOf(false) }
     var infoFor by remember { mutableStateOf<InternshipRecord?>(null) }
 
@@ -400,7 +401,12 @@ fun InternshipTrackerScreen(
                 onCountChanged(loaded.size)
 
                 // Old internships get a rules-only level once, in the background.
-                val missingLevel = loaded.filter { !it.hasLevel }
+                // Items that are being worked on right now, or were already done in
+                // this session, are skipped so a rules-only result can never replace
+                // a newer result.
+                val missingLevel = loaded.filter {
+                    !it.hasLevel && it.id !in busyIds && backfilledIds.add(it.id)
+                }
                 if (missingLevel.isNotEmpty()) {
                     scope.launch {
                         for (old in missingLevel) {

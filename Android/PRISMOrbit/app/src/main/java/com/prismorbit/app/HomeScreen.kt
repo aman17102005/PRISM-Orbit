@@ -859,6 +859,9 @@ fun HomeScreen(onLogout: () -> Unit = {}) {
         forceAi: Boolean = false
     ) {
         val uid = signedInUser?.uid ?: return
+        // A quick local refresh must never run next to a longer job for the same
+        // project, because the older result could replace the newer one.
+        if (project.id in busyProjectIds && linkCheck == LinkCheck.NEVER && !forceAi) return
         busyProjectIds.add(project.id)
         homeScope.launch {
             try {
