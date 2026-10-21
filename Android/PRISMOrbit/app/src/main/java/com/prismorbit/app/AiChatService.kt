@@ -252,6 +252,81 @@ object AiChatService {
     }
 
     // ========================================================
+    // ONE-SHOT JSON REQUEST (used for item levels)
+    // ========================================================
+    //
+    // Uses the same provider and key the student saved for Smart AI.
+    // No chat history, low temperature, and a hard time limit.
+    // The key is only used for the request. It is never logged.
+    // ========================================================
+
+    suspend fun completeJson(
+        provider: AiProvider,
+        apiKey: String,
+        systemText: String,
+        userText: String,
+        timeoutMs: Long = 45_000L
+    ): Result<String> {
+
+        if (apiKey.isBlank()) {
+            return Result.failure(IllegalStateException("No AI key saved."))
+        }
+
+        return try {
+
+            val reply = kotlinx.coroutines.withTimeout(timeoutMs) {
+                when (provider) {
+
+                    AiProvider.GEMINI ->
+                        callGemini(apiKey, systemText, emptyList(), userText, temperature = 0.1)
+
+                    AiProvider.OPENAI ->
+                        callOpenAiCompatible(
+                            "https://api.openai.com/v1/chat/completions",
+                            apiKey, provider.defaultModel, systemText, emptyList(), userText,
+                            temperature = 0.1
+                        )
+
+                    // These two may use models that only allow the default temperature.
+                    AiProvider.PERPLEXITY ->
+                        callOpenAiCompatible(
+                            "https://api.perplexity.ai/chat/completions",
+                            apiKey, provider.defaultModel, systemText, emptyList(), userText
+                        )
+
+                    AiProvider.GROK ->
+                        callOpenAiCompatible(
+                            "https://api.x.ai/v1/chat/completions",
+                            apiKey, provider.defaultModel, systemText, emptyList(), userText
+                        )
+
+                    AiProvider.ANTHROPIC ->
+                        callAnthropic(
+                            apiKey, provider.defaultModel, systemText, emptyList(), userText,
+                            temperature = 0.1
+                        )
+                }
+            }
+
+            if (reply.isNullOrBlank()) {
+                Result.failure(Exception("Empty AI answer."))
+            } else {
+                Result.success(reply.trim())
+            }
+
+        } catch (e: CancellationException) {
+            // A timeout is a normal failure here. A real cancellation must go on.
+            if (e is kotlinx.coroutines.TimeoutCancellationException) {
+                Result.failure(Exception("The AI took too long."))
+            } else {
+                throw e
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception(friendlyErrorMessage(e)))
+        }
+    }
+
+    // ========================================================
     // GEMINI
     // ========================================================
 
@@ -259,7 +334,8 @@ object AiChatService {
         apiKey: String,
         systemText: String,
         history: List<ChatTurn>,
-        newUserMessage: String
+        newUserMessage: String,
+        temperature: Double? = null
     ): String? {
 
         val contents =
@@ -294,7 +370,13 @@ object AiChatService {
                             )
                         ),
                 "contents" to contents
-            )
+            ) + (
+                    if (temperature != null) {
+                        mapOf("generationConfig" to mapOf("temperature" to temperature))
+                    } else {
+                        emptyMap()
+                    }
+                    )
 
         val request =
             Request.Builder()
@@ -354,7 +436,8 @@ object AiChatService {
         model: String,
         systemText: String,
         history: List<ChatTurn>,
-        newUserMessage: String
+        newUserMessage: String,
+        temperature: Double? = null
     ): String? {
 
         val messages =
@@ -392,10 +475,12 @@ object AiChatService {
         )
 
         val body =
-            mapOf(
+            mapOf<String, Any>(
                 "model" to model,
                 "messages" to messages
-            )
+            ) + (
+                    if (temperature != null) mapOf("temperature" to temperature) else emptyMap()
+                    )
 
         val request =
             Request.Builder()
@@ -441,7 +526,8 @@ object AiChatService {
         model: String,
         systemText: String,
         history: List<ChatTurn>,
-        newUserMessage: String
+        newUserMessage: String,
+        temperature: Double? = null
     ): String? {
 
         val messages =
@@ -477,7 +563,9 @@ object AiChatService {
                 "max_tokens" to 1024,
                 "system" to systemText,
                 "messages" to messages
-            )
+            ) + (
+                    if (temperature != null) mapOf("temperature" to temperature) else emptyMap()
+                    )
 
         val request =
             Request.Builder()
