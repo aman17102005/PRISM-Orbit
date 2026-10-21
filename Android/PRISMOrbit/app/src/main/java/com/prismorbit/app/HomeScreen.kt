@@ -64,7 +64,6 @@ import kotlinx.coroutines.withContext
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.storage.FirebaseStorage
 import kotlin.math.roundToInt
 
 
@@ -4555,7 +4554,6 @@ private fun ProfileScreen(
 ) {
     val auth = remember { FirebaseAuth.getInstance() }
     val firestore = remember { FirebaseFirestore.getInstance() }
-    val storage = remember { FirebaseStorage.getInstance() }
     val user = auth.currentUser
     val context = LocalContext.current
 
@@ -4574,6 +4572,8 @@ private fun ProfileScreen(
     var skills by remember { mutableStateOf("") }
     var about by remember { mutableStateOf("") }
     var photoUrl by remember { mutableStateOf("") }
+    var photoBase64 by remember { mutableStateOf("") }
+    val photoScope = rememberCoroutineScope()
     var localPhoto by remember { mutableStateOf<Bitmap?>(null) }
 
     val photoPicker = rememberLauncherForActivityResult(
@@ -4581,40 +4581,33 @@ private fun ProfileScreen(
     ) { uri: Uri? ->
         if (uri == null || user == null) return@rememberLauncherForActivityResult
 
-        try {
-            localPhoto = context.contentResolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it)
-            }
-        } catch (_: Exception) {
-            localPhoto = null
-        }
-
-        message = "Uploading photo..."
+        message = "Saving photo..."
         messageIsError = false
 
-        val photoRef = storage.reference.child("users/${user.uid}/profile_photo.jpg")
-        photoRef.putFile(uri)
-            .continueWithTask { task ->
-                if (!task.isSuccessful) throw task.exception ?: Exception("Photo upload failed.")
-                photoRef.downloadUrl
-            }
-            .addOnSuccessListener { downloadUri ->
-                photoUrl = downloadUri.toString()
-                firestore.collection("users").document(user.uid)
-                    .set(mapOf("photoUrl" to photoUrl), SetOptions.merge())
-                    .addOnSuccessListener {
-                        message = "Profile photo uploaded successfully."
-                        messageIsError = false
-                    }
-                    .addOnFailureListener { exception ->
-                        message = exception.message ?: "Photo saved, but profile update failed."
-                        messageIsError = true
-                    }
-            }
-            .addOnFailureListener { exception ->
-                message = exception.message ?: "Unable to upload profile photo."
+        // The photo is made small and saved as text in your profile. No Firebase Storage.
+        photoScope.launch {
+            val encoded = withContext(Dispatchers.IO) { ProfilePhotoCodec.encode(context, uri) }
+
+            if (encoded == null) {
+                message = "We could not read this photo. Please try another one."
                 messageIsError = true
+                return@launch
             }
+
+            localPhoto = ProfilePhotoCodec.decode(encoded)
+
+            firestore.collection("users").document(user.uid)
+                .set(mapOf("photoBase64" to encoded), SetOptions.merge())
+                .addOnSuccessListener {
+                    photoBase64 = encoded
+                    message = "Profile photo saved."
+                    messageIsError = false
+                }
+                .addOnFailureListener { exception ->
+                    message = exception.message ?: "Unable to save your profile photo."
+                    messageIsError = true
+                }
+        }
     }
 
     if (user == null) {
@@ -4642,6 +4635,8 @@ private fun ProfileScreen(
                 skills = document.getString("skills") ?: ""
                 about = document.getString("about") ?: ""
                 photoUrl = document.getString("photoUrl") ?: ""
+                photoBase64 = document.getString("photoBase64") ?: ""
+                if (localPhoto == null) localPhoto = ProfilePhotoCodec.decode(photoBase64)
                 isLoading = false
             }
             .addOnFailureListener { exception ->
@@ -4713,7 +4708,7 @@ private fun ProfileScreen(
                         Text("UPLOAD PHOTO", fontWeight = FontWeight.Bold, fontSize = 9.sp)
                     }
                 } else {
-                    Text(if (photoUrl.isNotBlank()) "PROFILE PHOTO SAVED" else "NO PROFILE PHOTO YET", color = Color(0xFF00D9FF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(if (photoBase64.isNotBlank() || photoUrl.isNotBlank()) "PROFILE PHOTO SAVED" else "NO PROFILE PHOTO YET", color = Color(0xFF00D9FF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 }
             }
         }
