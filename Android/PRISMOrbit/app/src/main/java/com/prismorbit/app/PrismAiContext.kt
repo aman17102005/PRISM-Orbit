@@ -19,7 +19,38 @@ data class PrismAiContext(
     val dsaSummary: DsaSummary,
     val projectsSummary: ProjectsSummary,
     val internshipCount: Int,
-    val placementInsight: SmartAiInsight?
+    val placementInsight: SmartAiInsight?,
+    val internshipItems: List<InternshipLevelSummary> = emptyList(),
+    val scores: ScoreSummary? = null
+)
+
+/** The same numbers every PRISM screen shows (from PrismScoring). */
+data class ScoreSummary(
+    val readiness: Int,
+    val academics: Int,
+    val dsa: Int,
+    val projects: Int,
+    val internships: Int,
+    val skills: Int,
+    val evidence: Int
+)
+
+data class ProjectLevelSummary(
+    val name: String,
+    val status: String,
+    val levelLabel: String,
+    val reason: String,
+    val githubCheck: String,
+    val liveCheck: String
+)
+
+data class InternshipLevelSummary(
+    val company: String,
+    val role: String,
+    val status: String,
+    val levelLabel: String,
+    val reason: String,
+    val proof: String
 )
 
 data class UpcomingEventSummary(
@@ -40,7 +71,8 @@ data class DsaSummary(
 data class ProjectsSummary(
     val totalProjects: Int,
     val averageProgressPercent: Int,
-    val completedCount: Int
+    val completedCount: Int,
+    val items: List<ProjectLevelSummary> = emptyList()
 )
 
 // ============================================================
@@ -74,8 +106,34 @@ fun PrismAiContext.toPromptText(): String {
         """.trimIndent()
     } ?: "Placement insight not currently available."
 
+    val scoresText = scores?.let {
+        """
+        PRISM SCORES (the same numbers shown on the Home, Placement and Growth screens):
+        - Overall readiness: ${it.readiness}/100
+        - Academics ${it.academics}, DSA ${it.dsa}, Projects ${it.projects}, Internships ${it.internships}, Skills ${it.skills}, Achievements ${it.evidence}
+        """.trimIndent()
+    } ?: ""
+
+    val projectLines = if (projectsSummary.items.isEmpty()) {
+        ""
+    } else {
+        "\n" + projectsSummary.items.joinToString("\n") { item ->
+            "- ${item.name} (${item.status}): ${item.levelLabel}. ${item.reason} GitHub: ${item.githubCheck}. Live link: ${item.liveCheck}."
+        }
+    }
+
+    val internshipLines = if (internshipItems.isEmpty()) {
+        ""
+    } else {
+        "\n" + internshipItems.joinToString("\n") { item ->
+            "- ${item.company}${if (item.role.isBlank()) "" else " - ${item.role}"} (${item.status}): ${item.levelLabel}. ${item.reason} Proof: ${item.proof}."
+        }
+    }
+
     return """
         Today's date: $todayDateText
+
+        $scoresText
 
         UPCOMING ACADEMIC EVENTS (next 7 days):
         $eventsText
@@ -89,9 +147,11 @@ fun PrismAiContext.toPromptText(): String {
         - Total: ${projectsSummary.totalProjects}
         - Completed: ${projectsSummary.completedCount}
         - Average progress: ${projectsSummary.averageProgressPercent}%
+        Project levels (1-5, worked out by PRISM's rules; the level changes the project marks, treat as fact):$projectLines
 
         INTERNSHIPS:
         - Tracked applications: $internshipCount
+        Internship levels (1-5, worked out by PRISM's rules; the level fully counts only when SELECTED):$internshipLines
 
         $placementText
     """.trimIndent()
