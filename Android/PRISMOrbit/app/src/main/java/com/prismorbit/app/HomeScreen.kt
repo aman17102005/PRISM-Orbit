@@ -3640,18 +3640,6 @@ private fun ProjectEditorScreen(
     }
 }
 
-private fun calculatePortfolioScore(projects: List<ProjectItem>): Int {
-    if (projects.isEmpty()) return 0
-    val averageProgress = projects.map { it.progress }.average()
-    val completionScore = projects.count { it.status == "COMPLETED" }.toFloat() / projects.size * 20f
-    val techScore = projects.count { it.techStack.isNotBlank() }.toFloat() / projects.size * 15f
-    val githubScore = projects.count { it.githubUrl.isNotBlank() }.toFloat() / projects.size * 15f
-    val liveScore = projects.count { it.liveUrl.isNotBlank() }.toFloat() / projects.size * 15f
-    val taskScore = projects.count { it.tasks.isNotEmpty() }.toFloat() / projects.size * 5f
-    val progressScore = averageProgress * 0.30f
-    return (completionScore + techScore + githubScore + liveScore + taskScore + progressScore).roundToInt().coerceIn(0, 100)
-}
-
 // =========================================================
 // DSA SCREEN
 // =========================================================
@@ -5394,81 +5382,20 @@ private fun FeatureCard(
 private fun calculateProblemScore(
     difficulty: String,
     topic: String
-): Float {
-
-    val difficultyWeight = when (difficulty) {
-
-        "Easy" -> 1.0f
-        "Medium" -> 2.0f
-        "Hard" -> 3.0f
-
-        else -> 1.0f
-    }
-
-    val topicMultiplier = when (topic) {
-
-        "Arrays" -> 1.00f
-        "Strings" -> 1.00f
-
-        "Searching & Sorting" -> 1.10f
-        "Linked List" -> 1.10f
-        "Stack & Queue" -> 1.10f
-        "Hashing" -> 1.10f
-
-        "Recursion" -> 1.20f
-        "Trees / BST" -> 1.20f
-        "Heap" -> 1.20f
-        "Greedy" -> 1.20f
-        "Bit Manipulation" -> 1.20f
-
-        "Graphs" -> 1.30f
-        "Backtracking" -> 1.30f
-        "Tries" -> 1.30f
-
-        "Dynamic Programming" -> 1.40f
-
-        else -> 1.00f
-    }
-
-    return difficultyWeight * topicMultiplier
-}
+): Float = PrismScoring.dsaProblemPoints(difficulty, topic).toFloat()
 
 
 // =========================================================
 // DSA PROGRESS CALCULATOR
 // =========================================================
+// Same formula everywhere: see PrismScoring (1000 points = 100%).
 
 private fun calculateDsaProgress(
     problems: List<DSAProblem>
-): Float {
-
-    if (problems.isEmpty()) {
-        return 0f
-    }
-
-    val weightedScore =
-        problems.sumOf {
-            it.score.toDouble()
-        }
-
-    /*
-     * 100 problems is the current PRISM target.
-     *
-     * Average target score is approximately 2.0.
-     * Therefore 100 × 2 = 200 weighted points.
-     */
-
-    val targetWeightedScore = 1000f
-
-    return (
-            weightedScore.toFloat() /
-                    targetWeightedScore *
-                    100f
-            ).coerceIn(
-            0f,
-            100f
-        )
-}
+): Float =
+    PrismScoring.dsaScoreExact(
+        problems.sumOf { it.score.toDouble() }
+    ).toFloat()
 
 
 // =========================================================

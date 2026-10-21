@@ -86,15 +86,9 @@ private data class PlacementSourceScores(
     val skills: Int = 0,
     val achievements: Int = 0
 ) {
+    // Same formula as every other screen: see PrismScoring.
     val readiness: Int
-        get() = (
-                academic * 0.15f +
-                        dsa * 0.25f +
-                        projects * 0.20f +
-                        internships * 0.15f +
-                        skills * 0.15f +
-                        achievements * 0.10f
-                ).roundToInt().coerceIn(0, 100)
+        get() = PrismScoring.readiness(academic, dsa, projects, internships, skills, achievements)
 }
 
 private fun placementCollection(
@@ -168,126 +162,34 @@ private fun documentToLearning(doc: com.google.firebase.firestore.DocumentSnapsh
     ).takeIf { it.name.isNotBlank() }
 
 private fun calculatePlacementSkillScore(items: List<PlacementSkillRecord>): Int =
-    if (items.isEmpty()) 0
-    else (items.map { it.rating }.average() * 10).roundToInt().coerceIn(0, 100)
+    PrismScoring.skillsScore(items.map { it.rating.toDouble() })
 
 private fun calculatePlacementAchievementScore(
     achievements: List<PlacementAchievementRecord>,
     certifications: List<PlacementCertificationRecord>,
     learning: List<PlacementLearningRecord>
-): Int {
-    val achievementPart = (achievements.size.coerceAtMost(5) / 5f) * 40f
-    val certificationPart = (certifications.size.coerceAtMost(5) / 5f) * 30f
-    val learningPart =
-        if (learning.isEmpty()) 0f
-        else (learning.map { it.level }.average().toFloat() / 10f) * 30f
+): Int = PrismScoring.evidenceScore(
+    achievements = achievements.size,
+    certifications = certifications.size,
+    learningScore = PrismScoring.learningScore(
+        levels = learning.map { it.level.toDouble() },
+        recordCount = learning.size
+    )
+)
 
-    return (achievementPart + certificationPart + learningPart)
-        .roundToInt()
-        .coerceIn(0, 100)
-}
+private fun calculatePlacementDsaScore(snapshot: com.google.firebase.firestore.QuerySnapshot): Int =
+    PrismScoring.dsaScore(snapshot.documents.sumOf { PrismScoreLoader.dsaPoints(it) })
 
-private fun calculatePlacementDsaScore(snapshot: com.google.firebase.firestore.QuerySnapshot): Int {
-    if (snapshot.isEmpty) return 0
-
-    val weighted = snapshot.documents.sumOf { doc ->
-        (doc.get("score") as? Number)?.toDouble() ?: 0.0
-    }
-
-    return (weighted / 1000.0 * 100.0)
-        .coerceIn(0.0, 100.0)
-        .roundToInt()
-}
-
-private fun calculatePlacementProjectScore(snapshot: com.google.firebase.firestore.QuerySnapshot): Int {
-    if (snapshot.isEmpty) return 0
-
-    val projects = snapshot.documents
-    val averageProgress = projects.map {
-        when (val raw = it.get("progress")) {
-            is Number -> raw.toDouble()
-            is String -> raw.toDoubleOrNull() ?: 0.0
-            else -> 0.0
-        }.coerceIn(0.0, 100.0)
-    }.average()
-
-    val size = projects.size.toFloat()
-    val completed = projects.count {
-        it.getString("status")?.uppercase() == "COMPLETED"
-    }.toFloat() / size * 20f
-
-    val tech = projects.count {
-        (it.getString("techStack") ?: it.getString("codingLanguage") ?: "").isNotBlank()
-    }.toFloat() / size * 15f
-
-    val github = projects.count {
-        it.getString("githubUrl").orEmpty().isNotBlank()
-    }.toFloat() / size * 15f
-
-    val live = projects.count {
-        it.getString("liveUrl").orEmpty().isNotBlank()
-    }.toFloat() / size * 15f
-
-    val tasks = projects.count {
-        (it.get("tasks") as? List<*>)?.isNotEmpty() == true
-    }.toFloat() / size * 5f
-
-    val progress = averageProgress * 0.30f
-
-    return (completed + tech + github + live + tasks + progress)
-        .roundToInt()
-        .coerceIn(0, 100)
-}
+private fun calculatePlacementProjectScore(snapshot: com.google.firebase.firestore.QuerySnapshot): Int =
+    PrismScoring.projectsScore(snapshot.documents.map { PrismScoreLoader.projectInput(it) })
 
 private fun calculatePlacementInternshipScore(
     snapshot: com.google.firebase.firestore.QuerySnapshot,
     projectCount: Int
-): Int {
-    if (snapshot.isEmpty && projectCount == 0) return 0
-
-    val internships = snapshot.documents
-    val applicationActivity =
-        (internships.size / 10f).coerceIn(0f, 1f) * 25f
-
-    val interviewExposure =
-        (
-                internships.count {
-                    val status = it.getString("status")?.uppercase()
-                    status == "INTERVIEW" || status == "SELECTED"
-                } / 5f
-                ).coerceIn(0f, 1f) * 20f
-
-    val outcomeExperience =
-        (
-                internships.count {
-                    it.getString("status")?.uppercase() == "SELECTED"
-                } / 2f
-                ).coerceIn(0f, 1f) * 20f
-
-    val projectFoundation =
-        (projectCount / 4f).coerceIn(0f, 1f) * 20f
-
-    val completeProfiles = internships.count {
-        it.getString("company").orEmpty().isNotBlank() &&
-                it.getString("role").orEmpty().isNotBlank() &&
-                it.getString("applicationDate").orEmpty().isNotBlank() &&
-                it.getString("jobUrl").orEmpty().isNotBlank()
-    }
-
-    val profileCompleteness =
-        if (internships.isEmpty()) 0f
-        else completeProfiles.toFloat() / internships.size * 15f
-
-    return (
-            applicationActivity +
-                    interviewExposure +
-                    outcomeExperience +
-                    projectFoundation +
-                    profileCompleteness
-            )
-        .roundToInt()
-        .coerceIn(0, 100)
-}
+): Int = PrismScoring.internshipsScore(
+    snapshot.documents.map { PrismScoreLoader.internshipInput(it) },
+    projectCount
+)
 
 @Composable
 fun PlacementTrackerScreen(
@@ -366,8 +268,7 @@ fun PlacementTrackerScreen(
         firestore.collection("users").document(uid).get()
             .addOnSuccessListener { doc ->
                 githubProfileUrl = doc.getString("githubProfileUrl").orEmpty()
-                val cgpa = doc.get("currentCgpa")?.toString()?.toFloatOrNull() ?: 0f
-                academic = (cgpa / 10f * 100f).roundToInt().coerceIn(0, 100)
+                academic = PrismScoring.academicsScore(PrismScoreLoader.number(doc.get("currentCgpa")))
                 finishedOne()
             }
             .addOnFailureListener {

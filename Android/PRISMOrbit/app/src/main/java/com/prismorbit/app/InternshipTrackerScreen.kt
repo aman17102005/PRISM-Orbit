@@ -1606,46 +1606,17 @@ private fun ChoiceRow(
 private fun calculateInternshipProfileStrength(
     internships: List<InternshipRecord>,
     projectCount: Int
-): Int {
-    // No internship records means there is no internship evidence.
-    // Projects must not create a non-zero internship score.
-    if (internships.isEmpty()) return 0
+): Int = PrismScoring.internshipsScore(
+    items = internships.map { it.toScoreInput() },
+    projectCount = projectCount
+)
 
-    val applicationActivity =
-        (internships.size / 10f).coerceIn(0f, 1f) * 25f
-
-    val interviewExposure =
-        (
-                internships.count {
-                    it.status == "INTERVIEW" || it.status == "SELECTED"
-                } / 5f
-                ).coerceIn(0f, 1f) * 20f
-
-    val outcomeExperience =
-        (internships.count { it.status == "SELECTED" } / 2f)
-            .coerceIn(0f, 1f) * 20f
-
-    val projectFoundation =
-        (projectCount / 4f).coerceIn(0f, 1f) * 20f
-
-    val completeProfiles = internships.count {
-        it.company.isNotBlank() &&
-                it.role.isNotBlank() &&
-                it.applicationDate.isNotBlank() &&
-                it.jobUrl.isNotBlank()
-    }
-
-    val profileCompleteness =
-        if (internships.isEmpty()) 0f
-        else (completeProfiles.toFloat() / internships.size) * 15f
-
-    return (
-            applicationActivity +
-                    interviewExposure +
-                    outcomeExperience +
-                    projectFoundation +
-                    profileCompleteness
-            )
-        .roundToInt()
-        .coerceIn(0, 100)
-}
+private fun InternshipRecord.toScoreInput() = PrismScoring.InternshipScoreInput(
+    status = status,
+    detailsComplete = PrismScoring.internshipDetailsComplete(
+        company = company,
+        role = role,
+        applicationDate = applicationDate,
+        jobUrl = jobUrl
+    )
+)
