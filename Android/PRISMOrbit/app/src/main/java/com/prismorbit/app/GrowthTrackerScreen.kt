@@ -46,31 +46,24 @@ import com.google.firebase.firestore.QuerySnapshot
 import kotlin.math.roundToInt
 
 private data class GrowthSnapshot(
-    val academics: Int,
-    val dsa: Int,
-    val projects: Int,
-    val internships: Int,
-    val skills: Int,
-    val achievements: Int,
-    val certifications: Int,
-    val learning: Int,
-    val dsaSolved: Int,
-    val projectCount: Int,
-    val completedProjects: Int,
-    val internshipCount: Int,
-    val interviews: Int,
-    val selected: Int,
-    val githubProfileAdded: Boolean
+    val summary: PrismScoreSummary
 ) {
-    val overall: Int
-        get() = weightedGrowthScore(
-            academics = academics,
-            dsa = dsa,
-            projects = projects,
-            internships = internships,
-            skills = skills,
-            achievements = achievements
-        )
+    val academics: Int get() = summary.breakdown.academics
+    val dsa: Int get() = summary.breakdown.dsa
+    val projects: Int get() = summary.breakdown.projects
+    val internships: Int get() = summary.breakdown.internships
+    val skills: Int get() = summary.breakdown.skills
+    val achievements: Int get() = summary.breakdown.evidence
+    val dsaSolved: Int get() = summary.dsaSolved
+    val projectCount: Int get() = summary.projectCount
+    val completedProjects: Int get() = summary.completedProjects
+    val internshipCount: Int get() = summary.internshipCount
+    val interviews: Int get() = summary.interviews
+    val selected: Int get() = summary.selected
+    val githubProfileAdded: Boolean get() = summary.githubProfileAdded
+
+    // Same formula as every other screen: see PrismScoring.
+    val overall: Int get() = summary.readiness
 }
 
 data class GrowthDashboardSummary(
@@ -85,39 +78,25 @@ fun loadGrowthDashboardSummary(
     onSuccess: (GrowthDashboardSummary) -> Unit,
     onError: (Exception) -> Unit
 ) {
-    val userRef = firestore.collection("users").document(uid)
-    val tasks = listOf(
-        userRef.get(),
-        userRef.collection("dsaProblems").get(),
-        userRef.collection("projects").get(),
-        userRef.collection("internships").get(),
-        userRef.collection("placementSkills").get(),
-        userRef.collection("placementAchievements").get(),
-        userRef.collection("placementCertifications").get(),
-        userRef.collection("placementLearning").get()
-    )
-
-    Tasks.whenAllSuccess<Any>(tasks)
-        .addOnSuccessListener { results ->
-            try {
-                val snapshot = buildGrowthSnapshot(results)
-                onSuccess(
-                    GrowthDashboardSummary(
-                        growthScore = snapshot.overall,
-                        placementScore = placementReadinessScore(snapshot),
-                        internshipCount = snapshot.internshipCount
-                    )
+    PrismScoreLoader.load(
+        firestore = firestore,
+        uid = uid,
+        onSuccess = { summary ->
+            onSuccess(
+                GrowthDashboardSummary(
+                    growthScore = summary.readiness,
+                    placementScore = summary.readiness,
+                    internshipCount = summary.internshipCount
                 )
-            } catch (exception: Exception) {
-                onError(exception)
-            }
-        }
-        .addOnFailureListener { exception -> onError(exception) }
+            )
+        },
+        onError = onError
+    )
 }
 
 /**
- * Loads the same persisted user data used by the other desktops and calculates
- * the Growth score without creating a second copy of that data.
+ * Loads the same persisted user data used by the other screens and calculates
+ * the Growth score through PrismScoring.
  */
 fun loadGrowthScore(
     firestore: FirebaseFirestore,
@@ -131,224 +110,6 @@ fun loadGrowthScore(
         onSuccess = { summary -> onSuccess(summary.growthScore) },
         onError = onError
     )
-}
-
-private fun buildGrowthSnapshot(results: List<Any>): GrowthSnapshot {
-    val userDocument = results[0] as DocumentSnapshot
-    val dsaDocuments = (results[1] as QuerySnapshot).documents
-    val projectDocuments = (results[2] as QuerySnapshot).documents
-    val internshipDocuments = (results[3] as QuerySnapshot).documents
-    val skillDocuments = (results[4] as QuerySnapshot).documents
-    val achievementDocuments = (results[5] as QuerySnapshot).documents
-    val certificationDocuments = (results[6] as QuerySnapshot).documents
-    val learningDocuments = (results[7] as QuerySnapshot).documents
-    val githubProfileAdded = userDocument.getString("githubProfileUrl").orEmpty().isNotBlank()
-
-    val cgpa = userDocument.get("currentCgpa")
-        .toString()
-        .toFloatOrNull()
-        ?.coerceIn(0f, 10f)
-        ?: 0f
-
-    val academics = (cgpa * 10f).roundToInt()
-
-    val dsaWeightedScore = dsaDocuments.sumOf { document ->
-        val storedScore = document.get("score").asFloatOrNull()
-        val difficulty = document.getString("difficulty").orEmpty()
-        val topic = document.getString("topic").orEmpty()
-        (storedScore ?: growthProblemScore(difficulty, topic)).toDouble()
-    }.toFloat()
-
-    // Uses the same 1000-point DSA target already used by the app's DSA score.
-    val dsa = (dsaWeightedScore / 1000f * 100f)
-        .coerceIn(0f, 100f)
-        .roundToInt()
-
-    val projectCount = projectDocuments.size
-    val completedProjects = projectDocuments.count { document ->
-        val progress = document.get("progress").asFloatOrNull() ?: 0f
-        val status = document.getString("status").orEmpty().uppercase()
-        status == "COMPLETED" || progress >= 100f
-    }
-
-    val projectProgress = if (projectCount == 0) {
-        0f
-    } else {
-        projectDocuments.sumOf { document ->
-            (document.get("progress").asFloatOrNull() ?: 0f)
-                .coerceIn(0f, 100f)
-                .toDouble()
-        }.toFloat() / projectCount
-    }
-
-    val projects = projectProgress.roundToInt()
-
-    val internshipCount = internshipDocuments.size
-    val interviews = internshipDocuments.count { document ->
-        val status = document.getString("status").orEmpty().uppercase()
-        status == "INTERVIEW" || status == "SELECTED"
-    }
-    val selected = internshipDocuments.count { document ->
-        document.getString("status").orEmpty().uppercase() == "SELECTED"
-    }
-
-    val internships = internshipDevelopmentScore(
-        total = internshipCount,
-        interviews = interviews,
-        selected = selected
-    )
-
-    val skillRatings = skillDocuments.mapNotNull { document ->
-        document.get("rating").asFloatOrNull()
-    }
-    val skills = if (skillRatings.isEmpty()) {
-        0
-    } else {
-        (skillRatings.average().toFloat() * 10f)
-            .coerceIn(0f, 100f)
-            .roundToInt()
-    }
-
-    val achievements = achievementDocuments.size
-    val certifications = certificationDocuments.size
-    val learning = learningDevelopmentScore(learningDocuments)
-
-    val achievementScore = profileEvidenceScore(
-        achievements = achievements,
-        certifications = certifications,
-        learningScore = learning
-    )
-
-    return GrowthSnapshot(
-        academics = academics,
-        dsa = dsa,
-        projects = projects,
-        internships = internships,
-        skills = skills,
-        achievements = achievementScore,
-        certifications = certifications,
-        learning = learning,
-        dsaSolved = dsaDocuments.size,
-        projectCount = projectCount,
-        completedProjects = completedProjects,
-        internshipCount = internshipCount,
-        interviews = interviews,
-        selected = selected,
-        githubProfileAdded = githubProfileAdded
-    )
-}
-
-private fun placementReadinessScore(snapshot: GrowthSnapshot): Int {
-    return weightedGrowthScore(
-        academics = snapshot.academics,
-        dsa = snapshot.dsa,
-        projects = snapshot.projects,
-        internships = snapshot.internships,
-        skills = snapshot.skills,
-        achievements = snapshot.achievements
-    )
-}
-
-private fun weightedGrowthScore(
-    academics: Int,
-    dsa: Int,
-    projects: Int,
-    internships: Int,
-    skills: Int,
-    achievements: Int
-): Int {
-    return (
-            academics * 0.15f +
-                    dsa * 0.25f +
-                    projects * 0.20f +
-                    internships * 0.15f +
-                    skills * 0.15f +
-                    achievements * 0.10f
-            ).coerceIn(0f, 100f).roundToInt()
-}
-
-private fun internshipDevelopmentScore(
-    total: Int,
-    interviews: Int,
-    selected: Int
-): Int {
-    if (total == 0) return 0
-
-    val applicationSignal = (total.toFloat() / (total + 5f)) * 100f
-    val interviewSignal = (interviews.toFloat() / total) * 100f
-    val selectionSignal = (selected.toFloat() / total) * 100f
-
-    return (
-            applicationSignal * 0.45f +
-                    interviewSignal * 0.35f +
-                    selectionSignal * 0.20f
-            ).coerceIn(0f, 100f).roundToInt()
-}
-
-private fun profileEvidenceScore(
-    achievements: Int,
-    certifications: Int,
-    learningScore: Int
-): Int {
-    val achievementSignal = percentageFromCount(achievements)
-    val certificationSignal = percentageFromCount(certifications)
-
-    return (
-            achievementSignal * 0.40f +
-                    certificationSignal * 0.30f +
-                    learningScore * 0.30f
-            ).coerceIn(0f, 100f).roundToInt()
-}
-
-private fun percentageFromCount(count: Int): Float {
-    if (count <= 0) return 0f
-    return (100f * count / (count + 4f)).coerceIn(0f, 100f)
-}
-
-private fun learningDevelopmentScore(
-    documents: List<DocumentSnapshot>
-): Int {
-    if (documents.isEmpty()) return 0
-
-    val numericLevels = documents.mapNotNull { document ->
-        document.get("level").asFloatOrNull()
-    }
-
-    if (numericLevels.isNotEmpty()) {
-        return (numericLevels.average().toFloat() * 10f)
-            .coerceIn(0f, 100f)
-            .roundToInt()
-    }
-
-    return percentageFromCount(documents.size).roundToInt()
-}
-
-private fun Any?.asFloatOrNull(): Float? = when (this) {
-    is Number -> toFloat()
-    is String -> toFloatOrNull()
-    else -> null
-}
-
-private fun growthProblemScore(
-    difficulty: String,
-    topic: String
-): Float {
-    val difficultyWeight = when (difficulty.trim()) {
-        "Easy" -> 1f
-        "Medium" -> 2f
-        "Hard" -> 3f
-        else -> 1f
-    }
-
-    val topicMultiplier = when (topic.trim()) {
-        "Dynamic Programming" -> 1.40f
-        "Graphs", "Backtracking", "Tries" -> 1.30f
-        "Recursion", "Trees / BST", "Heap", "Greedy", "Bit Manipulation" -> 1.20f
-        "Searching & Sorting", "Linked List", "Stack & Queue", "Hashing" -> 1.10f
-        else -> 1.00f
-    }
-
-    return difficultyWeight * topicMultiplier
 }
 
 @Composable
@@ -374,33 +135,20 @@ fun GrowthTrackerScreen(
         loading = true
         error = ""
 
-        val tasks = listOf(
-            firestore.collection("users").document(uid).get(),
-            firestore.collection("users").document(uid).collection("dsaProblems").get(),
-            firestore.collection("users").document(uid).collection("projects").get(),
-            firestore.collection("users").document(uid).collection("internships").get(),
-            firestore.collection("users").document(uid).collection("placementSkills").get(),
-            firestore.collection("users").document(uid).collection("placementAchievements").get(),
-            firestore.collection("users").document(uid).collection("placementCertifications").get(),
-            firestore.collection("users").document(uid).collection("placementLearning").get()
-        )
-
-        Tasks.whenAllSuccess<Any>(tasks)
-            .addOnSuccessListener { results ->
-                try {
-                    val snapshot = buildGrowthSnapshot(results)
-                    data = snapshot
-                    onGrowthChanged(snapshot.overall)
-                    loading = false
-                } catch (exception: Exception) {
-                    error = exception.message ?: "Unable to calculate growth."
-                    loading = false
-                }
-            }
-            .addOnFailureListener { exception ->
+        PrismScoreLoader.load(
+            firestore = firestore,
+            uid = uid,
+            onSuccess = { summary ->
+                val snapshot = GrowthSnapshot(summary)
+                data = snapshot
+                onGrowthChanged(snapshot.overall)
+                loading = false
+            },
+            onError = { exception ->
                 error = exception.message ?: "Unable to load growth data."
                 loading = false
             }
+        )
     }
 
     LaunchedEffect(uid) {

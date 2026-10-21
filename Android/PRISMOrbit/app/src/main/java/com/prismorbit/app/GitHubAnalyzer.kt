@@ -79,8 +79,29 @@ data class GitHubRepositoryEvidence(
      */
     val sampledSourceFiles: List<String> = emptyList(),
 
+    /**
+     * Features found from file names and a few manifest files:
+     * auth, database, backend_api, ai_ml, payments, realtime,
+     * mobile_app, deployment, tests. Evidence only.
+     */
+    val detectedFeatures: List<String> = emptyList(),
+
+    /**
+     * Why the check did not work. Empty when it worked.
+     * One of: INVALID_URL, NOT_FOUND, RATE_LIMITED, NETWORK, OTHER.
+     * RATE_LIMITED, NETWORK and OTHER mean "could not check", never "failed".
+     */
+    val failure: String = "",
+
     val errorMessage: String? = null
 )
+
+/** A GitHub answer that was not 2xx. */
+class GitHubHttpException(
+    val code: Int,
+    message: String,
+    val rateLimited: Boolean
+) : IllegalStateException(message)
 
 object GitHubAnalyzer {
 
@@ -91,11 +112,20 @@ object GitHubAnalyzer {
     // -------------------------------------------------------------
 
     /**
-     * Maximum number of source files whose contents are actually read.
+     * Maximum number of source files whose contents are actually read
+     * (kept small because of GitHub's anonymous rate limit).
      *
      * This keeps GitHub API usage controlled.
      */
-    private const val MAX_SOURCE_CONTENT_SAMPLES = 5
+    private const val MAX_SOURCE_CONTENT_SAMPLES = 3
+
+    /**
+     * Feature detection reads at most this many file paths and 2 manifest files.
+     * GitHub allows about 60 anonymous requests per hour, so one check is
+     * kept to about 11 requests.
+     */
+    private const val MAX_PATHS_FOR_FEATURES = 6000
+    private const val MAX_MANIFEST_CHARS = 20_000
 
     /**
      * Maximum README characters considered by the analyzer.
@@ -123,6 +153,7 @@ object GitHubAnalyzer {
         if (parsedRepository == null) {
             return@withContext GitHubRepositoryEvidence(
                 isValidUrl = false,
+                failure = "INVALID_URL",
                 errorMessage = "Invalid GitHub repository URL."
             )
         }
@@ -163,9 +194,14 @@ object GitHubAnalyzer {
             // 2. Repository root contents
             // ---------------------------------------------------------
 
-            val rootContents = getJsonArray(
-                "$API_BASE/repos/$owner/$repository/contents"
-            )
+            val rootContents = try {
+                getJsonArray(
+                    "$API_BASE/repos/$owner/$repository/contents"
+                )
+            } catch (e: GitHubHttpException) {
+                // An empty repository answers 404 here. The repository exists.
+                if (e.code == 404) JSONArray() else throw e
+            }
 
             var hasReadme = false
             var readmeFileName = ""
@@ -218,6 +254,7 @@ object GitHubAnalyzer {
              * can be sampled later.
              */
             val sourceFilePaths = mutableListOf<String>()
+            val allFilePaths = mutableListOf<String>()
 
             try {
 
@@ -244,6 +281,10 @@ object GitHubAnalyzer {
 
                         val path =
                             item.optString("path", "")
+
+                        if (allFilePaths.size < MAX_PATHS_FOR_FEATURES) {
+                            allFilePaths.add(path)
+                        }
 
                         if (isSourceFile(path)) {
                             sourceFileCount++
@@ -396,6 +437,37 @@ object GitHubAnalyzer {
             }
 
             // ---------------------------------------------------------
+            // 8. FEATURE DETECTION (cheap: paths + at most 3 small files)
+            // ---------------------------------------------------------
+
+            var detectedFeatures: List<String> = emptyList()
+
+            try {
+
+                val manifests = mutableMapOf<String, String>()
+
+                for (path in ProjectFeatureDetector.pickManifests(allFilePaths, limit = 2)) {
+                    try {
+                        val manifestJson = getJson(
+                            "$API_BASE/repos/$owner/$repository/contents/${Uri.encode(path, "/")}?ref=$defaultBranch"
+                        )
+                        manifests[path] = decodeGitHubContent(
+                            manifestJson.optString("content", "")
+                        ).take(MAX_MANIFEST_CHARS)
+                    } catch (_: Exception) {
+                        // One unreadable manifest does not stop detection.
+                    }
+                }
+
+                detectedFeatures = ProjectFeatureDetector
+                    .detect(allFilePaths, manifests)
+                    .toList()
+
+            } catch (_: Exception) {
+                // Feature detection is supplementary evidence.
+            }
+
+            // ---------------------------------------------------------
             // Final evidence object
             // ---------------------------------------------------------
 
@@ -432,6 +504,8 @@ object GitHubAnalyzer {
                 sampledSourceFiles =
                     sampledSourceFiles.toList(),
 
+                detectedFeatures = detectedFeatures,
+
                 errorMessage = null
             )
 
@@ -443,6 +517,7 @@ object GitHubAnalyzer {
                 isAccessible = false,
                 owner = owner,
                 repository = repository,
+                failure = classifyFailure(exception),
                 errorMessage =
                     exception.message
                         ?: "Unable to access GitHub repository."
@@ -601,56 +676,18 @@ object GitHubAnalyzer {
 
     private fun parseRepositoryUrl(
         repositoryUrl: String
-    ): Pair<String, String>? {
+    ): Pair<String, String>? =
+        GitHubUrls.parseRepository(repositoryUrl)
 
-        val cleanedUrl =
-            repositoryUrl
-                .trim()
-                .removeSuffix("/")
-
-        if (cleanedUrl.isBlank()) {
-            return null
-        }
-
-        val uri = try {
-            Uri.parse(cleanedUrl)
-        } catch (_: Exception) {
-            return null
-        }
-
-        val host =
-            uri.host?.lowercase()
-
-        if (
-            host != "github.com" &&
-            host != "www.github.com"
-        ) {
-            return null
-        }
-
-        val segments =
-            uri.pathSegments
-
-        if (segments.size < 2) {
-            return null
-        }
-
-        val owner =
-            segments[0].trim()
-
-        val repository =
-            segments[1]
-                .trim()
-                .removeSuffix(".git")
-
-        if (
-            owner.isBlank() ||
-            repository.isBlank()
-        ) {
-            return null
-        }
-
-        return owner to repository
+    /**
+     * 404 = the repository was not found (or is private).
+     * Rate limit, no internet and anything else = we could not check.
+     */
+    internal fun classifyFailure(exception: Exception): String = when {
+        exception is GitHubHttpException && exception.rateLimited -> "RATE_LIMITED"
+        exception is GitHubHttpException && exception.code == 404 -> "NOT_FOUND"
+        exception is java.io.IOException -> "NETWORK"
+        else -> "OTHER"
     }
 
     // ================================================================
@@ -726,6 +763,9 @@ object GitHubAnalyzer {
 
             if (responseCode !in 200..299) {
 
+                val remaining =
+                    connection.getHeaderField("X-RateLimit-Remaining")
+
                 val message =
                     try {
 
@@ -740,8 +780,16 @@ object GitHubAnalyzer {
                         "GitHub request failed."
                     }
 
-                throw IllegalStateException(
-                    "GitHub API $responseCode: $message"
+                val rateLimited =
+                    responseCode == 429 ||
+                            (responseCode == 403 &&
+                                    (remaining == "0" ||
+                                            message.contains("rate limit", ignoreCase = true)))
+
+                throw GitHubHttpException(
+                    code = responseCode,
+                    message = "GitHub API $responseCode: $message",
+                    rateLimited = rateLimited
                 )
             }
 

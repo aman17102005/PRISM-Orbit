@@ -60,11 +60,13 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("com.squareup.okhttp3:logging-interceptor:5.5.0")
 
+    // On-device text reading for internship proof (bundled model, free, works offline)
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:34.16.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
-    implementation("com.google.firebase:firebase-storage")
 
     // Tests
     testImplementation(libs.junit)

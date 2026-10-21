@@ -53,6 +53,7 @@ object PrismContextBuilder {
         )
 
         val placementInsight = awaitSmartAiInsight(firestore, uid)
+        val scores = awaitScores(firestore, uid)
 
         return PrismAiContext(
             todayDateText = todayDateText(),
@@ -60,7 +61,9 @@ object PrismContextBuilder {
             dsaSummary = buildDsaSummary(dsaSnapshot),
             projectsSummary = buildProjectsSummary(projectsSnapshot),
             internshipCount = internshipsSnapshot.documents.size,
-            placementInsight = placementInsight
+            placementInsight = placementInsight,
+            internshipItems = buildInternshipItems(internshipsSnapshot),
+            scores = scores
         )
     }
 
@@ -105,11 +108,7 @@ object PrismContextBuilder {
     // --------------------------------------------------------
     // DSA SUMMARY
     // --------------------------------------------------------
-    // Note: the weighted-score formula mirrors calculateDsaProgress()
-    // in HomeScreen.kt (1000-point target). That function is private
-    // to its file, so it's intentionally re-implemented here rather
-    // than duplicated via a shared dependency, to avoid touching
-    // existing files. If the target ever changes, update both places.
+    // The weighted-score formula lives in PrismScoring (1000 points = 100%).
 
     private fun buildDsaSummary(snapshot: QuerySnapshot): DsaSummary {
         val documents = snapshot.documents
@@ -118,13 +117,9 @@ object PrismContextBuilder {
         val medium = documents.count { it.getString("difficulty") == "Medium" }
         val hard = documents.count { it.getString("difficulty") == "Hard" }
 
-        val weightedScore = documents.sumOf { document ->
-            (document.getDouble("score") ?: document.getLong("score")?.toDouble() ?: 0.0)
-        }
-
-        val weightedPercent = ((weightedScore / 1000.0) * 100.0)
-            .coerceIn(0.0, 100.0)
-            .toInt()
+        val weightedPercent = PrismScoring.dsaScore(
+            documents.sumOf { PrismScoreLoader.dsaPoints(it) }
+        )
 
         return DsaSummary(
             totalSolved = documents.size,
@@ -157,10 +152,71 @@ object PrismContextBuilder {
             it.getString("status")?.trim()?.uppercase(Locale.ROOT) == "COMPLETED"
         }
 
+        val items = documents.mapNotNull { documentToProjectItem(it) }.map { project ->
+            ProjectLevelSummary(
+                name = project.name.take(60),
+                status = project.status,
+                levelLabel = PrismScoring.levelLabel(project.level, project.levelName) +
+                        if (project.hasLevel) "" else " (not worked out yet)",
+                reason = project.levelReason.take(120),
+                githubCheck = ProjectVerifier.githubChip(project.githubUrl, project.githubEvidence)
+                    .text.ifBlank { "no link" },
+                liveCheck = ProjectVerifier.liveChip(project.liveUrl, project.liveCheck)
+                    .text.ifBlank { "no link" }
+            )
+        }
+
         return ProjectsSummary(
             totalProjects = documents.size,
             averageProgressPercent = progressValues.average().toInt(),
-            completedCount = completed
+            completedCount = completed,
+            items = items
+        )
+    }
+
+    private fun buildInternshipItems(snapshot: QuerySnapshot): List<InternshipLevelSummary> =
+        snapshot.documents.mapNotNull { doc ->
+            val data = doc.data ?: return@mapNotNull null
+            val company = data["company"]?.toString().orEmpty().trim()
+            if (company.isBlank()) return@mapNotNull null
+
+            val levelFinal = PrismScoreLoader.number(data["levelFinal"])?.toInt()?.coerceIn(1, 5)
+            val level = levelFinal ?: PrismScoring.DEFAULT_LEVEL
+            val proof = ProofStorage.summaryOf(PrismScoreLoader.stringMap(data["proof"]))
+
+            InternshipLevelSummary(
+                company = company.take(60),
+                role = data["role"]?.toString().orEmpty().take(60),
+                status = data["status"]?.toString().orEmpty().uppercase(Locale.ROOT),
+                levelLabel = PrismScoring.levelLabel(level, PrismScoring.internshipLevelName(level)) +
+                        if (levelFinal == null) " (not worked out yet)" else "",
+                reason = data["levelReason"]?.toString().orEmpty().take(120),
+                proof = if (proof.isPresent) proof.status.lowercase(Locale.ROOT) else "none"
+            )
+        }
+
+    private suspend fun awaitScores(
+        firestore: FirebaseFirestore,
+        uid: String
+    ): ScoreSummary? = suspendCancellableCoroutine { continuation ->
+        PrismScoreLoader.load(
+            firestore = firestore,
+            uid = uid,
+            onSuccess = { summary ->
+                val b = summary.breakdown
+                continuation.resume(
+                    ScoreSummary(
+                        readiness = summary.readiness,
+                        academics = b.academics,
+                        dsa = b.dsa,
+                        projects = b.projects,
+                        internships = b.internships,
+                        skills = b.skills,
+                        evidence = b.evidence
+                    )
+                )
+            },
+            onError = { continuation.resume(null) } // context builder degrades gracefully
         )
     }
 

@@ -15,17 +15,17 @@ import kotlin.math.roundToInt
 //
 // SMART AI uses only data already stored by PRISM Orbit.
 //
-// FINAL DESIGN WEIGHTS
-// Technical Skills                         20%
+// FINAL DESIGN WEIGHTS (read from PrismScoring - the single source)
+// Technical Skills                         15%
 // Projects / Practical Evidence            20%
-// DSA / Problem Solving                    18%
+// DSA / Problem Solving                    25%
 // Internship / Real Experience             15%
-// Academics / CGPA                         12%
+// Academics / CGPA                         15%
 // Achievements + Certifications + Learning 10%
-// Growth / Consistency                      5%
+// Growth / Consistency                      0% (coaching signal only)
 //
 // v0.3 ARCHITECTURE
-// • Base weights remain exactly the v0.2 distribution.
+// • Base weights are the PrismScoring readiness weights.
 // • Optional role-aware multipliers are normalized back to 100%.
 // • Trend only activates when existing timestamp data is present.
 // • Target CGPA affects context, never the academic weight.
@@ -73,8 +73,10 @@ private data class SmartAiSnapshot(
     val achievements: List<DocumentSnapshot>,
     val certifications: List<DocumentSnapshot>,
     val learning: List<DocumentSnapshot>,
-    val existingGrowthScore: Int?
-)
+    val breakdown: PrismScoring.Breakdown
+) {
+    val existingGrowthScore: Int get() = breakdown.readiness
+}
 
 private data class FactorScore(
     val key: String,
@@ -170,17 +172,10 @@ fun loadSmartAiInsight(
                         profile.get("targetCgpa")
                     )
 
-                val existingGrowthScore =
-                    calculateExistingGrowthScore(
-                        currentCgpa = currentCgpa,
-                        dsaProblems = dsaProblems,
-                        projects = projects,
-                        internships = internships,
-                        skills = skills,
-                        achievements = achievements,
-                        certifications = certifications,
-                        learning = learning
-                    )
+                val breakdown =
+                    PrismScoreLoader.buildSummary(
+                        listOf(results[0]) + results.drop(2)
+                    ).breakdown
 
                 val snapshot =
                     SmartAiSnapshot(
@@ -195,7 +190,7 @@ fun loadSmartAiInsight(
                         achievements = achievements,
                         certifications = certifications,
                         learning = learning,
-                        existingGrowthScore = existingGrowthScore
+                        breakdown = breakdown
                     )
 
                 onSuccess(
@@ -241,7 +236,7 @@ private fun generateSmartAiInsight(
 
     // --------------------------------------------------------
     // A near-term academic event is contextual urgency.
-    // It does NOT change the 12% academic model weight.
+    // It does NOT change the 15% academic model weight.
     // --------------------------------------------------------
 
     val urgentAcademicEvent =
@@ -370,10 +365,8 @@ private fun generateSmartAiInsight(
     // are automatically normalized.
     // --------------------------------------------------------
 
-    val overallScore =
-        weightedOverallScore(
-            observedFactors
-        )
+    // Same number as the Growth, Placement and Home screens.
+    val overallScore = data.existingGrowthScore
 
     // --------------------------------------------------------
     // Find the largest weighted weakness.
@@ -559,329 +552,101 @@ private fun parseDateTime(value: String): java.util.Date? {
 }
 
 // ============================================================
-// FACTOR 1 — TECHNICAL SKILLS — 20%
+// FACTORS
+// ============================================================
+// Every score comes from PrismScoring (via PrismScoreLoader), so
+// Smart AI can never show a different number from another screen.
 // ============================================================
 
 private fun technicalSkillsFactor(
     data: SmartAiSnapshot
 ): FactorScore {
 
-    val ratings =
-        data.skills.mapNotNull {
-            parseFloatOrNull(
-                it.get("rating")
-            )?.takeIf { value ->
-                value in 0f..10f
-            }
+    val observed =
+        data.skills.any {
+            parseFloatOrNull(it.get("rating"))?.let { value -> value in 0f..10f } == true
         }
-
-    if (ratings.isEmpty()) {
-
-        return FactorScore(
-            key = "SKILLS",
-            label = "Technical Skills",
-            baseWeight = 0.20f,
-            weight = 0.20f,
-            score = null,
-            observed = false,
-            trend = 0f,
-            reason = "No placement skill ratings are currently recorded."
-        )
-    }
-
-    val score =
-        (
-                ratings.average()
-                    .toFloat() * 10f
-                ).coerceIn(
-                0f,
-                100f
-            )
 
     return FactorScore(
         key = "SKILLS",
         label = "Technical Skills",
-        baseWeight = 0.20f,
-        weight = 0.20f,
-        score = score,
-        observed = true,
-        trend = timestampTrend(data.skills),
-        reason = "Based on the average of the recorded placement skill ratings."
+        baseWeight = PrismScoring.WEIGHT_SKILLS.toFloat(),
+        weight = PrismScoring.WEIGHT_SKILLS.toFloat(),
+        score = if (observed) data.breakdown.skills.toFloat() else null,
+        observed = observed,
+        trend = if (observed) timestampTrend(data.skills) else 0f,
+        reason = if (observed) {
+            "Based on the average of the recorded placement skill ratings."
+        } else {
+            "No placement skill ratings are currently recorded."
+        }
     )
 }
-
-
-// ============================================================
-// FACTOR 2 — PROJECTS — 20%
-// ============================================================
 
 private fun projectsFactor(
     data: SmartAiSnapshot
 ): FactorScore {
 
-    if (data.projects.isEmpty()) {
-
-        return FactorScore(
-            key = "PROJECTS",
-            label = "Projects",
-            baseWeight = 0.20f,
-            weight = 0.20f,
-            score = 0f,
-            observed = true,
-            trend = 0f,
-            reason = "No projects are currently recorded in PRISM."
-        )
-    }
-
-    val projectScores =
-        data.projects.map { project ->
-            calculateProjectPracticalScore(project)
-        }
-
-    val averageProjectScore =
-        projectScores.average().toFloat()
-
-    val analyzedCount =
+    val verifiedCount =
         data.projects.count { project ->
-            val evidence = project.get("githubEvidence") as? Map<*, *>
-            evidence?.get("isAccessible") as? Boolean == true
+            PrismScoreLoader.projectInput(project).githubStatus == PrismScoring.GithubStatus.VERIFIED
         }
 
     return FactorScore(
         key = "PROJECTS",
         label = "Projects",
-        baseWeight = 0.20f,
-        weight = 0.20f,
-        score = averageProjectScore.coerceIn(0f, 100f),
+        baseWeight = PrismScoring.WEIGHT_PROJECTS.toFloat(),
+        weight = PrismScoring.WEIGHT_PROJECTS.toFloat(),
+        score = data.breakdown.projects.toFloat(),
         observed = true,
-        trend = timestampTrend(data.projects),
-        reason = if (analyzedCount > 0) {
-            "Based on project progress/status plus analyzed GitHub repository evidence for $analyzedCount project(s)."
-        } else {
-            "Based on recorded project progress/status. GitHub evidence is used automatically when a repository has been analyzed."
+        trend = if (data.projects.isEmpty()) 0f else timestampTrend(data.projects),
+        reason = when {
+            data.projects.isEmpty() -> "No projects are currently recorded in PRISM."
+            verifiedCount > 0 -> "Based on project progress, verified links and project levels. $verifiedCount project(s) have a verified GitHub repository."
+            else -> "Based on project progress, links and project levels. A verified GitHub link raises this score."
         }
     )
 }
-
-private fun calculateProjectPracticalScore(
-    project: DocumentSnapshot
-): Float {
-
-    val progress =
-        parseFloatOrNull(project.get("progress"))
-            ?.coerceIn(0f, 100f)
-            ?: when (
-                normalize(project.getString("status"))
-            ) {
-                "COMPLETED" -> 90f
-                "ARCHIVED" -> 90f
-                "ONGOING" -> 60f
-                "PLANNING" -> 30f
-                "IDEA" -> 15f
-                else -> 0f
-            }
-
-    val evidence =
-        project.get("githubEvidence") as? Map<*, *>
-
-    if (evidence == null) {
-        return progress
-    }
-
-    val accessible =
-        evidence["isAccessible"] as? Boolean ?: false
-
-    if (!accessible) {
-        return progress
-    }
-
-    var evidenceScore = 0f
-
-    if (evidence["isValidUrl"] as? Boolean == true) evidenceScore += 10f
-    if (evidence["isPublic"] as? Boolean == true) evidenceScore += 10f
-    if (evidence["hasReadme"] as? Boolean == true) evidenceScore += 5f
-    if (evidence["readmeHasMeaningfulContent"] as? Boolean == true) evidenceScore += 15f
-    if (evidence["sourceContentHasMeaningfulCode"] as? Boolean == true) evidenceScore += 25f
-
-    val sourceSamples =
-        (evidence["sourceContentSampleCount"] as? Number)?.toInt() ?: 0
-    if (sourceSamples > 0) evidenceScore += 10f
-
-    val sourceFiles =
-        (evidence["sourceFileCount"] as? Number)?.toInt() ?: 0
-    if (sourceFiles > 0) evidenceScore += 5f
-
-    val commits =
-        (evidence["recentCommitSampleSize"] as? Number)?.toInt() ?: 0
-    if (commits > 0) evidenceScore += 10f
-
-    val languages =
-        (evidence["languageCount"] as? Number)?.toInt() ?: 0
-    if (languages > 0) evidenceScore += 5f
-
-    // GitHub evidence is supporting practical evidence, not a
-    // standalone hiring score. It is blended 50/50 with project
-    // progress/status so a URL cannot dominate the model.
-    return (
-            progress * 0.50f +
-                    evidenceScore.coerceIn(0f, 100f) * 0.50f
-            ).coerceIn(0f, 100f)
-}
-
-
-// ============================================================
-// FACTOR 3 — DSA — 18%
-// ============================================================
 
 private fun dsaFactor(
     data: SmartAiSnapshot
 ): FactorScore {
 
-    if (data.dsaProblems.isEmpty()) {
-
-        return FactorScore(
-            key = "DSA",
-            label = "DSA",
-            baseWeight = 0.18f,
-            weight = 0.18f,
-            score = 0f,
-            observed = true,
-            trend = 0f,
-            reason = "No solved DSA problems are currently recorded."
-        )
-    }
-
-    val weightedScore =
-        data.dsaProblems.sumOf { document ->
-
-            val storedScore =
-                parseFloatOrNull(
-                    document.get("score")
-                )
-
-            val score =
-                storedScore
-                    ?: calculateProblemWeight(
-                        difficulty =
-                            document.getString("difficulty"),
-                        topic =
-                            document.getString("topic")
-                    )
-
-            score.toDouble()
-        }.toFloat()
-
-    // PRISM already uses 1000 weighted points as its DSA target.
-    val score =
-        (
-                weightedScore /
-                        1000f * 100f
-                ).coerceIn(
-                0f,
-                100f
-            )
-
     return FactorScore(
         key = "DSA",
         label = "DSA",
-        baseWeight = 0.18f,
-        weight = 0.18f,
-        score = score,
+        baseWeight = PrismScoring.WEIGHT_DSA.toFloat(),
+        weight = PrismScoring.WEIGHT_DSA.toFloat(),
+        score = data.breakdown.dsa.toFloat(),
         observed = true,
-        trend = timestampTrend(data.dsaProblems),
-        reason = "Based on the recorded DSA scores, difficulty and topic weighting."
+        trend = if (data.dsaProblems.isEmpty()) 0f else timestampTrend(data.dsaProblems),
+        reason = if (data.dsaProblems.isEmpty()) {
+            "No solved DSA problems are currently recorded."
+        } else {
+            "Based on the recorded DSA scores, difficulty and topic weighting."
+        }
     )
 }
-
-
-// ============================================================
-// FACTOR 4 — INTERNSHIPS — 15%
-// ============================================================
 
 private fun internshipFactor(
     data: SmartAiSnapshot
 ): FactorScore {
 
-    if (data.internships.isEmpty()) {
-
-        return FactorScore(
-            key = "INTERNSHIPS",
-            label = "Internships",
-            baseWeight = 0.15f,
-            weight = 0.15f,
-            score = 0f,
-            observed = true,
-            trend = 0f,
-            reason = "No internship records are currently recorded in PRISM."
-        )
-    }
-
-    val total =
-        data.internships.size
-
-    val interviews =
-        data.internships.count {
-            val status =
-                normalize(
-                    it.getString("status")
-                )
-
-            status == "INTERVIEW" ||
-                    status == "SELECTED"
-        }
-
-    val selected =
-        data.internships.count {
-            normalize(
-                it.getString("status")
-            ) == "SELECTED"
-        }
-
-    // Same signal structure already used by PRISM Growth.
-    val applicationSignal =
-        (
-                total.toFloat() /
-                        (total + 5f)
-                ) * 100f
-
-    val interviewSignal =
-        (
-                interviews.toFloat() /
-                        total
-                ) * 100f
-
-    val selectionSignal =
-        (
-                selected.toFloat() /
-                        total
-                ) * 100f
-
-    val score =
-        (
-                applicationSignal * 0.45f +
-                        interviewSignal * 0.35f +
-                        selectionSignal * 0.20f
-                ).coerceIn(
-                0f,
-                100f
-            )
-
     return FactorScore(
         key = "INTERNSHIPS",
         label = "Internships",
-        baseWeight = 0.15f,
-        weight = 0.15f,
-        score = score,
+        baseWeight = PrismScoring.WEIGHT_INTERNSHIPS.toFloat(),
+        weight = PrismScoring.WEIGHT_INTERNSHIPS.toFloat(),
+        score = data.breakdown.internships.toFloat(),
         observed = true,
-        trend = timestampTrend(data.internships),
-        reason = "Based on recorded applications, interview-stage progress and selections."
+        trend = if (data.internships.isEmpty()) 0f else timestampTrend(data.internships),
+        reason = if (data.internships.isEmpty()) {
+            "No internship records are currently recorded in PRISM."
+        } else {
+            "Based on recorded applications, interview-stage progress, selections and internship levels."
+        }
     )
 }
-
-
-// ============================================================
-// FACTOR 5 — ACADEMICS — 12%
-// ============================================================
 
 private fun academicsFactor(
     data: SmartAiSnapshot
@@ -893,149 +658,60 @@ private fun academicsFactor(
                 it in 0f..10f
             }
 
-    if (cgpa == null) {
-
-        return FactorScore(
-            key = "ACADEMICS",
-            label = "Academics",
-            baseWeight = 0.12f,
-            weight = 0.12f,
-            score = null,
-            observed = false,
-            trend = 0f,
-            reason = "Current CGPA is not recorded."
-        )
-    }
-
-    val score =
-        (
-                cgpa * 10f
-                ).coerceIn(
-                0f,
-                100f
-            )
-
     return FactorScore(
         key = "ACADEMICS",
         label = "Academics",
-        baseWeight = 0.12f,
-        weight = 0.12f,
-        score = score,
-        observed = true,
+        baseWeight = PrismScoring.WEIGHT_ACADEMICS.toFloat(),
+        weight = PrismScoring.WEIGHT_ACADEMICS.toFloat(),
+        score = if (cgpa == null) null else data.breakdown.academics.toFloat(),
+        observed = cgpa != null,
         trend = 0f,
-        reason = "Based on current CGPA. Target CGPA is contextual information, not a fixed priority score."
+        reason = if (cgpa == null) {
+            "Current CGPA is not recorded."
+        } else {
+            "Based on current CGPA. Target CGPA is contextual information, not a fixed priority score."
+        }
     )
 }
-
-
-// ============================================================
-// FACTOR 6 — ACHIEVEMENTS + CERTIFICATIONS + LEARNING — 10%
-// ============================================================
 
 private fun profileEvidenceFactor(
     data: SmartAiSnapshot
 ): FactorScore {
 
-    val achievements =
-        data.achievements.size
-
-    val certifications =
-        data.certifications.size
-
-    val learningScore =
-        calculateLearningScore(
-            data.learning
-        )
-
-    if (
-        achievements == 0 &&
-        certifications == 0 &&
-        data.learning.isEmpty()
-    ) {
-
-        return FactorScore(
-            key = "EVIDENCE",
-            label = "Achievements & Learning",
-            baseWeight = 0.10f,
-            weight = 0.10f,
-            score = 0f,
-            observed = true,
-            trend = 0f,
-            reason = "No achievements, certifications or learning records are currently recorded."
-        )
-    }
-
-    val achievementSignal =
-        percentageFromCount(
-            achievements
-        )
-
-    val certificationSignal =
-        percentageFromCount(
-            certifications
-        )
-
-    val score =
-        (
-                achievementSignal * 0.40f +
-                        certificationSignal * 0.30f +
-                        learningScore * 0.30f
-                ).coerceIn(
-                0f,
-                100f
-            )
+    val empty =
+        data.achievements.isEmpty() &&
+                data.certifications.isEmpty() &&
+                data.learning.isEmpty()
 
     return FactorScore(
         key = "EVIDENCE",
         label = "Achievements & Learning",
-        baseWeight = 0.10f,
-        weight = 0.10f,
-        score = score,
+        baseWeight = PrismScoring.WEIGHT_EVIDENCE.toFloat(),
+        weight = PrismScoring.WEIGHT_EVIDENCE.toFloat(),
+        score = data.breakdown.evidence.toFloat(),
         observed = true,
-        trend = timestampTrend(data.achievements + data.certifications + data.learning),
-        reason = "Based on recorded achievements, certifications and additional learning."
+        trend = if (empty) 0f else timestampTrend(data.achievements + data.certifications + data.learning),
+        reason = if (empty) {
+            "No achievements, certifications or learning records are currently recorded."
+        } else {
+            "Based on recorded achievements, certifications and additional learning."
+        }
     )
 }
-
-
-// ============================================================
-// FACTOR 7 — GROWTH / CONSISTENCY — 5%
-// ============================================================
 
 private fun growthFactor(
     data: SmartAiSnapshot
 ): FactorScore {
 
-    val growth =
-        data.existingGrowthScore
-            ?.coerceIn(
-                0,
-                100
-            )
-
-    if (growth == null) {
-
-        return FactorScore(
-            key = "GROWTH",
-            label = "Growth",
-            baseWeight = 0.05f,
-            weight = 0.05f,
-            score = null,
-            observed = false,
-            trend = 0f,
-            reason = "Existing Growth data could not be calculated."
-        )
-    }
-
     return FactorScore(
         key = "GROWTH",
         label = "Growth",
-        baseWeight = 0.05f,
-        weight = 0.05f,
-        score = growth.toFloat(),
+        baseWeight = 0f,
+        weight = 0f,
+        score = data.existingGrowthScore.toFloat(),
         observed = true,
         trend = 0f,
-        reason = "Uses PRISM's existing Growth score as a small consistency signal."
+        reason = "Uses PRISM's Growth score. It is the same number as the Home and Placement screens."
     )
 }
 
@@ -1071,7 +747,7 @@ private fun buildCandidate(
                 priority = priority,
                 title = "Strengthen your technical skills.",
                 message = "Your recorded technical-skill score is $roundedScore/100.",
-                reason = "Technical skills carry the highest SMART AI design weight because role-relevant ability is central to skills-based hiring.",
+                reason = "Technical skills carry 15% of your readiness score because role-relevant ability is central to skills-based hiring.",
                 action = "Pick one important technical skill and improve it through focused practice plus a project."
             )
 
@@ -1131,7 +807,7 @@ private fun buildCandidate(
                 priority = priority,
                 title = "Improve your academic performance.",
                 message = "Your current academic score is $roundedScore/100.",
-                reason = "Academics remain a useful supporting signal, but they are deliberately limited to 12% of the SMART AI model.",
+                reason = "Academics remain a useful supporting signal, but they are deliberately limited to 15% of the SMART AI model.",
                 action = "Focus on upcoming academic work and the subjects where you can raise your semester performance."
             )
 
@@ -1153,7 +829,7 @@ private fun buildCandidate(
                 priority = priority,
                 title = "Keep improving consistently.",
                 message = "Your recorded Growth score is $roundedScore/100.",
-                reason = "Growth is intentionally a small 5% consistency signal in the SMART AI model.",
+                reason = "Growth is a coaching signal with no extra weight in the SMART AI model.",
                 action = "Maintain consistent progress across your weakest meaningful area."
             )
     }
@@ -1227,226 +903,6 @@ private fun priorityFromWeakness(
             35,
             90
         )
-}
-
-
-// ============================================================
-// OVERALL PROFILE SCORE
-// ============================================================
-
-private fun weightedOverallScore(
-    factors: List<FactorScore>
-): Int {
-
-    if (factors.isEmpty()) {
-        return 0
-    }
-
-    val totalWeight =
-        factors.sumOf {
-            it.weight.toDouble()
-        }.toFloat()
-
-    if (totalWeight <= 0f) {
-        return 0
-    }
-
-    val weighted =
-        factors.sumOf {
-            (
-                    it.score!! *
-                            it.weight
-                    ).toDouble()
-        }.toFloat()
-
-    return (
-            weighted /
-                    totalWeight
-            )
-        .roundToInt()
-        .coerceIn(
-            0,
-            100
-        )
-}
-
-
-// ============================================================
-// EXISTING GROWTH SCORE MIRROR
-// ============================================================
-//
-// This mirrors the existing Growth calculation already present
-// in PRISM. It does NOT modify the Growth screen or its weights.
-
-private fun calculateExistingGrowthScore(
-    currentCgpa: Float?,
-    dsaProblems: List<DocumentSnapshot>,
-    projects: List<DocumentSnapshot>,
-    internships: List<DocumentSnapshot>,
-    skills: List<DocumentSnapshot>,
-    achievements: List<DocumentSnapshot>,
-    certifications: List<DocumentSnapshot>,
-    learning: List<DocumentSnapshot>
-): Int? {
-
-    if (currentCgpa == null) {
-        return null
-    }
-
-    val academics =
-        (
-                currentCgpa * 10f
-                ).coerceIn(
-                0f,
-                100f
-            )
-
-    val dsaWeighted =
-        dsaProblems.sumOf { document ->
-
-            (
-                    parseFloatOrNull(
-                        document.get("score")
-                    ) ?: calculateProblemWeight(
-                        difficulty =
-                            document.getString("difficulty"),
-                        topic =
-                            document.getString("topic")
-                    )
-                    ).toDouble()
-        }.toFloat()
-
-    val dsa =
-        (
-                dsaWeighted /
-                        1000f * 100f
-                ).coerceIn(
-                0f,
-                100f
-            )
-
-    val projectsScore =
-        if (projects.isEmpty()) {
-            0f
-        } else {
-            projects.map {
-                parseFloatOrNull(
-                    it.get("progress")
-                )?.coerceIn(
-                    0f,
-                    100f
-                ) ?: 0f
-            }.average().toFloat()
-        }
-
-    val internshipTotal =
-        internships.size
-
-    val interviews =
-        internships.count {
-            val status =
-                normalize(
-                    it.getString("status")
-                )
-
-            status == "INTERVIEW" ||
-                    status == "SELECTED"
-        }
-
-    val selected =
-        internships.count {
-            normalize(
-                it.getString("status")
-            ) == "SELECTED"
-        }
-
-    val internshipScore =
-        if (internshipTotal == 0) {
-            0f
-        } else {
-
-            val applicationSignal =
-                (
-                        internshipTotal.toFloat() /
-                                (internshipTotal + 5f)
-                        ) * 100f
-
-            val interviewSignal =
-                (
-                        interviews.toFloat() /
-                                internshipTotal
-                        ) * 100f
-
-            val selectionSignal =
-                (
-                        selected.toFloat() /
-                                internshipTotal
-                        ) * 100f
-
-            (
-                    applicationSignal * 0.45f +
-                            interviewSignal * 0.35f +
-                            selectionSignal * 0.20f
-                    ).coerceIn(
-                    0f,
-                    100f
-                )
-        }
-
-    val skillRatings =
-        skills.mapNotNull {
-            parseFloatOrNull(
-                it.get("rating")
-            )?.takeIf {
-                    value -> value in 0f..10f
-            }
-        }
-
-    val skillScore =
-        if (skillRatings.isEmpty()) {
-            0f
-        } else {
-            (
-                    skillRatings.average()
-                        .toFloat() * 10f
-                    ).coerceIn(
-                    0f,
-                    100f
-                )
-        }
-
-    val learningScore =
-        calculateLearningScore(
-            learning
-        )
-
-    val evidenceScore =
-        (
-                percentageFromCount(
-                    achievements.size
-                ) * 0.40f +
-                        percentageFromCount(
-                            certifications.size
-                        ) * 0.30f +
-                        learningScore * 0.30f
-                ).coerceIn(
-                0f,
-                100f
-            )
-
-    return (
-            academics * 0.15f +
-                    dsa * 0.25f +
-                    projectsScore * 0.20f +
-                    internshipScore * 0.15f +
-                    skillScore * 0.15f +
-                    evidenceScore * 0.10f
-            )
-        .coerceIn(
-            0f,
-            100f
-        )
-        .roundToInt()
 }
 
 
@@ -1581,144 +1037,6 @@ private fun findUrgentAcademicEvents(
         daysUntil = earliestDays
     )
 }
-
-// ============================================================
-// LEARNING / EVIDENCE HELPERS
-// ============================================================
-
-private fun calculateLearningScore(
-    documents: List<DocumentSnapshot>
-): Float {
-
-    if (documents.isEmpty()) {
-        return 0f
-    }
-
-    val hours =
-        documents.sumOf { document ->
-
-            (
-                    parseFloatOrNull(
-                        document.get("hours")
-                    ) ?: parseFloatOrNull(
-                        document.get("duration")
-                    ) ?: 0f
-                    ).toDouble()
-        }.toFloat()
-
-    return if (hours > 0f) {
-
-        (
-                hours /
-                        (hours + 20f) *
-                        100f
-                ).coerceIn(
-                0f,
-                100f
-            )
-
-    } else {
-
-        percentageFromCount(
-            documents.size
-        )
-    }
-}
-
-private fun percentageFromCount(
-    count: Int
-): Float {
-
-    if (count <= 0) {
-        return 0f
-    }
-
-    return (
-            100f * count /
-                    (count + 4f)
-            ).coerceIn(
-            0f,
-            100f
-        )
-}
-
-
-// ============================================================
-// DSA WEIGHTING
-// ============================================================
-//
-// Matches the topic/difficulty weighting already used by the
-// existing DSA implementation in PRISM.
-// ============================================================
-
-private fun calculateProblemWeight(
-    difficulty: String?,
-    topic: String?
-): Float {
-
-    val difficultyWeight =
-        when (
-            normalize(
-                difficulty
-            )
-        ) {
-
-            "EASY" -> 1.0f
-
-            "MEDIUM" -> 2.0f
-
-            "HARD" -> 3.0f
-
-            else -> 1.0f
-        }
-
-    val topicMultiplier =
-        when (
-            normalize(
-                topic
-            )
-        ) {
-
-            "ARRAYS" -> 1.00f
-
-            "STRINGS" -> 1.00f
-
-            "SEARCHING & SORTING" -> 1.10f
-
-            "LINKED LIST" -> 1.10f
-
-            "STACK & QUEUE" -> 1.10f
-
-            "HASHING" -> 1.10f
-
-            "RECURSION" -> 1.20f
-
-            "TREES / BST" -> 1.20f
-
-            "HEAP" -> 1.20f
-
-            "GREEDY" -> 1.20f
-
-            "BIT MANIPULATION" -> 1.20f
-
-            "GRAPHS" -> 1.30f
-
-            "BACKTRACKING" -> 1.30f
-
-            "TRIES" -> 1.30f
-
-            "DYNAMIC PROGRAMMING" -> 1.40f
-
-            else -> 1.00f
-        }
-
-    return (
-            difficultyWeight *
-                    topicMultiplier *
-                    10f
-            )
-}
-
 
 // ============================================================
 // DATE / PARSING / STRING HELPERS
